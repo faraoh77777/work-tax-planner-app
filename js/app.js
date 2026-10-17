@@ -135,7 +135,7 @@
     var cond = '<section class="card"><h3>조건(가정)</h3><div class="form">' +
       '<label class="row"><input type="checkbox" data-action="design-cond" name="homelessHead"' + (d.homelessHead ? ' checked' : '') + '>무주택 세대주(주택청약·월세·전세대출 공제 요건)</label>' +
       '<label>중소기업 취업자 감면 구분<select data-action="design-cond" name="smeCategory">' + opts(L.sme, d.smeCategory) + '</select></label>' +
-      '<label>주택담보대출 조건(이자 공제 한도)<select data-action="design-cond" name="mortgageCapKey">' + rp.housing.mortgageInterest.capOptions.map(function (o) { return '<option value="' + o.key + '"' + (o.key === d.mortgageCapKey ? ' selected' : '') + '>' + esc(o.label) + ' ' + won(o.cap) + '</option>'; }).join('') + '</select></label>' +
+      '<label>주택담보대출 조건(이자 공제 한도, 설정과 같은 값)<select data-action="design-cond" name="mortgageCapKey">' + (state.profile.mortgageCapKey ? '' : '<option value="" selected>미선택(설계는 첫 구간으로 가정)</option>') + rp.housing.mortgageInterest.capOptions.map(function (o) { return '<option value="' + o.key + '"' + (o.key === d.mortgageCapKey ? ' selected' : '') + '>' + esc(o.label) + ' ' + won(o.cap) + '</option>'; }).join('') + '</select></label>' +
       '</div><div class="btns"><button class="btn small" data-action="design-reset">설계 초기화</button></div></section>';
     function saveCell(r) {
       if (r.na) return '<span class="faint">대상 아님</span>';
@@ -156,7 +156,7 @@
           '<form data-form="design-family" class="form dadd"><b class="full">부양가족 추가(가상)</b><label>관계<select name="relation">' + opts(L.rel, 'LINEAL_ASCENDANT') + '</select></label><label>별칭<input name="alias" placeholder="예: 어머니"></label><label>출생연도<input name="birthYear" inputmode="numeric" placeholder="예: 1955" required></label><label class="row"><input type="checkbox" name="disability">장애인</label><label class="row"><input type="checkbox" name="born">올해 출생·입양</label><label>자녀 순번(출생·입양 시)<select name="childOrder"><option value="">-</option><option value="1">첫째</option><option value="2">둘째</option><option value="3">셋째 이상</option></select></label><div class="faint full">연소득 100만원 이하(근로소득만 있으면 총급여 500만원 이하)라고 가정합니다. 실제 가족은 설정에서 입력하세요.</div><div class="full btns"><button class="btn" type="submit">가족 추가</button></div></form>';
       } else {
         items = g.items.map(function (r) {
-          var amt = r.toggleOnly ? '<span class="faint">' + esc(r.cap) + '</span>' : '<input class="damt" inputmode="numeric" data-action="design-amount" data-key="' + r.key + '" value="' + Math.round(r.amount || 0).toLocaleString('ko-KR') + '"' + (r.na || r.locked ? ' disabled' : '') + '>' + (r.example && !r.max ? '<div class="faint">예시 금액</div>' : '');
+          var amt = r.toggleOnly ? '<span class="faint">' + esc(r.cap) + '</span>' : '<input class="damt" inputmode="numeric" data-action="design-amount" data-key="' + r.key + '" value="' + Math.round(r.amount || 0).toLocaleString('ko-KR') + '"' + (r.na || r.locked ? ' disabled' : '') + '>' + (r.fromActual ? '<div class="faint">내 입력값</div>' : (r.example && !r.max ? '<div class="faint">예시 금액</div>' : ''));
           return '<div class="ditem' + (r.on ? '' : ' off') + (r.na || r.locked ? ' na' : '') + '"><label class="dchk"><input type="checkbox" data-action="design-toggle" data-key="' + r.key + '"' + (r.on ? ' checked' : '') + (r.na || r.locked ? ' disabled' : '') + '></label><div class="dmain"><b>' + esc(r.label) + '</b><div class="faint">' + esc(r.sub) + (r.blockedReason ? ' · <span class="warn-ink">' + esc(r.blockedReason) + '</span>' : '') + '</div></div><div class="dsave">' + saveCell(r) + '</div>' +
             '<div class="dnums"><div><span>요율</span>' + esc(r.rate) + '</div><div><span>한도</span>' + esc(r.cap) + '</div><div><span>' + (r.toggleOnly ? '금액' : '사용·납입액') + '</span>' + amt + '</div><div><span>공제금액</span>' + won(r.on ? r.deduction : r.potentialDeduction) + '</div></div></div>';
         }).join('');
@@ -743,6 +743,8 @@
     if (act === 'mortgage-cap') { state.profile.mortgageCapKey = el.value || null; var y0 = window.scrollY; persist().then(function (ok) { if (ok) toast(el.value ? '대출 조건 저장됨 · 전체 재계산' : '대출 조건 미선택'); render(); window.scrollTo(0, y0); }); return; }
     if (act === 'design-toggle') { scenarioItem(el.getAttribute('data-key')).on = el.checked; saveScenario(); return; }
     if (act === 'design-amount') { var v = num(el.value); if (v === null || v < 0) { toast('금액을 숫자로 입력하세요', true); return; } scenarioItem(el.getAttribute('data-key')).amount = v; saveScenario(); return; }
+    // 담보대출 조건은 설정·공제 관리와 같은 값(profile)을 쓴다 — 한 곳에서 바꾸면 모든 화면에 반영
+    if (act === 'design-cond' && el.name === 'mortgageCapKey') { state.profile.mortgageCapKey = el.value || null; delete state.scenario.mortgageCapKey; saveScenario(); return; }
     if (act === 'design-cond') { state.scenario[el.name] = el.type === 'checkbox' ? el.checked : el.value; saveScenario(); return; }
     if (act === 'design-fam') {
       var fid = el.getAttribute('data-id');

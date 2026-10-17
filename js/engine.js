@@ -799,7 +799,7 @@
       M({ key: 'PENSION_SAVING', group: 'SAVING', label: '연금저축', sub: '연금계좌 세액공제(IRP와 합산 ' + won0(pa.totalCap) + ')', rate: pctText(pRate), cap: won0(pa.savingCap), on: true, amount: pa.savingCap, max: pa.savingCap, metric: 'pension', type: '세액공제' }),
       M({ key: 'IRP', group: 'SAVING', label: 'IRP(개인형 퇴직연금)', sub: '연금저축과 합산 ' + won0(pa.totalCap) + ' 한도', rate: pctText(pRate), cap: won0(pa.totalCap - pa.savingCap) + '(합산 기준)', on: true, amount: pa.totalCap - pa.savingCap, max: pa.totalCap, metric: 'pension', type: '세액공제' }),
       M({ key: 'ISA', group: 'SAVING', label: 'ISA 만기 연금계좌 전환', sub: '전환액의 10%, 최대 ' + won0(pa.isaConversion.cap) + ' 추가', rate: pctText(pRate), cap: '전환 ' + won0(pa.isaConversion.cap / pa.isaConversion.rate), on: false, amount: fl(pa.isaConversion.cap / pa.isaConversion.rate), metric: 'pension', type: '세액공제' }),
-      M({ key: 'SUBSCRIPTION', group: 'SAVING', label: '주택청약종합저축', sub: gross > hs.subscription.grossCap ? '총급여 7천만원 초과 → 대상 아님' : '무주택 세대주만(아래 조건에서 선택)', rate: pctText(hs.subscription.rate), cap: won0(hs.subscription.annualPayCap), on: true, amount: hs.subscription.annualPayCap, max: hs.subscription.annualPayCap, na: gross > hs.subscription.grossCap, needsHomeless: true, metric: 'housing', type: '소득공제' }),
+      M({ key: 'SUBSCRIPTION', group: 'SAVING', label: '주택청약종합저축', sub: gross > hs.subscription.grossCap ? '총급여 7천만원 초과 → 대상 아님' : '무주택 세대주만(위 조건에서 선택)', rate: pctText(hs.subscription.rate), cap: won0(hs.subscription.annualPayCap), on: true, amount: hs.subscription.annualPayCap, max: hs.subscription.annualPayCap, na: gross > hs.subscription.grossCap, needsHomeless: true, metric: 'housing', type: '소득공제' }),
       M({ key: 'INSURANCE', group: 'INSURANCE', label: '보장성보험(자동차·실손·종신 등)', sub: '연 100만원 한도', rate: pctText(rules.insurance.rate), cap: won0(rules.insurance.cap), on: true, amount: rules.insurance.cap, max: rules.insurance.cap, metric: 'insurance' }),
       M({ key: 'INSURANCE_DISABLED', group: 'INSURANCE', label: '장애인전용 보장성보험', sub: '장애인 피보험자', rate: pctText(rules.insurance.disabledRate), cap: won0(rules.insurance.disabledCap), on: false, amount: rules.insurance.disabledCap, max: rules.insurance.disabledCap, metric: 'insurance' }),
       M({ key: 'MED_SELF', group: 'MEDICAL', label: '본인·65세 이상·6세 이하·장애인', sub: '한도 없음. 총급여 3%(' + won0(medThr) + ') 넘는 금액부터', rate: pctText(md.rate), cap: '한도 없음', on: false, amount: ceilTo(medThr + 1000000, 10000), metric: 'medical', example: true }),
@@ -818,7 +818,7 @@
       M({ key: 'DON_RELIGIOUS', group: 'DONATION', label: '종교단체 기부금', sub: '근로소득금액 10% 한도', rate: pctText(dn.religious.lowRate), cap: '소득 10%', on: false, amount: 1000000, metric: 'donation', example: true }),
       M({ key: 'RENT', group: 'HOUSING', label: '월세 세액공제', sub: gross > rt.grossCap ? '총급여 8천만원 초과 → 대상 아님' : '무주택 세대주, 국민주택규모·기준시가 4억 이하', rate: pctText(rentRate), cap: won0(rt.rentCap), on: false, amount: 6000000, max: rt.rentCap, na: gross > rt.grossCap, needsHomeless: true, metric: 'rent', example: true }),
       M({ key: 'RENT_LOAN', group: 'HOUSING', label: '전세대출 원리금 상환', sub: '무주택 세대주, 청약과 합산 공제 ' + won0(hs.rentLoan.combinedCapWithSubscription), rate: pctText(hs.rentLoan.rate), cap: '공제 ' + won0(hs.rentLoan.combinedCapWithSubscription), on: false, amount: 10000000, needsHomeless: true, metric: 'housing', type: '소득공제', example: true }),
-      M({ key: 'MORTGAGE', group: 'HOUSING', label: '주택담보대출 이자', sub: '무주택·1주택 세대주, 취득 당시 기준시가 6억 이하. 한도는 아래 조건의 대출 조건', rate: '100%(소득공제)', cap: '조건별 600만~2천만원', on: false, amount: 8000000, metric: 'mortgage', type: '소득공제', example: true }),
+      M({ key: 'MORTGAGE', group: 'HOUSING', label: '주택담보대출 이자', sub: '무주택·1주택 세대주, 취득 당시 기준시가 6억 이하. 한도는 위 조건(가정)의 대출 조건', rate: '100%(소득공제)', cap: '조건별 600만~2천만원', on: false, amount: 8000000, metric: 'mortgage', type: '소득공제', example: true }),
       M({ key: 'MARRIAGE', group: 'OTHER', label: '혼인세액공제', sub: '올해 혼인신고(' + rules.marriageCredit.yearsFrom + '~' + rules.marriageCredit.yearsTo + ', 생애 1회)', rate: '정액', cap: won0(rules.marriageCredit.amount), on: false, toggleOnly: true, metric: 'marriage' }),
       M({ key: 'SME', group: 'OTHER', label: '중소기업 취업자 소득세 감면', sub: '청년 90%(5년)·60세 이상·장애인·경력단절 70%(3년), 연 200만원 한도 — 구분은 아래 조건', rate: '70~90%', cap: '연 200만원', on: false, toggleOnly: true, metric: 'sme', type: '감면' })
     ].map(function (it) { it.type = it.type || DESIGN_GROUPS.filter(function (g) { return g.key === it.group; })[0].type; return it; });
@@ -906,6 +906,26 @@
     var a = after.personal.amounts, b = before.personal.amounts;
     return Object.keys(PERSONAL_LABELS).map(function (k) { return { key: k, label: PERSONAL_LABELS[k], amount: (a[k] || 0) - (b[k] || 0) }; }).filter(function (x) { return x.amount !== 0; });
   }
+  // 설계 항목별로 실제 입력된 연간 금액(귀속연도). 의료비·교육비는 대상 구분(meta)으로 나눈다
+  function designActualAmounts(state, rules) {
+    var inp = collectDeductionInputs(state), out = {};
+    function sum(cat, pred) { return (inp[cat] || []).filter(function (e) { return !pred || pred(e.meta || {}); }).reduce(function (a, e) { return a + num(e.amount); }, 0); }
+    out.PENSION_SAVING = sum('PENSION_SAVING'); out.IRP = sum('IRP'); out.ISA = sum('ISA_CONVERSION'); out.SUBSCRIPTION = sum('HOUSING_SUBSCRIPTION');
+    out.INSURANCE = sum('INSURANCE'); out.INSURANCE_DISABLED = sum('INSURANCE_DISABLED');
+    out.MED_GLASSES = sum('MEDICAL', function (m) { return m.kind === 'GLASSES'; });
+    out.MED_SELF = sum('MEDICAL', function (m) { return m.kind !== 'GLASSES' && (m.group === 'UNLIMITED' || m.group === 'PREMATURE'); });
+    out.MED_GENERAL = sum('MEDICAL', function (m) { return m.kind !== 'GLASSES' && (!m.group || m.group === 'GENERAL'); });
+    out.MED_INFERTILITY = sum('MEDICAL', function (m) { return m.kind !== 'GLASSES' && m.group === 'INFERTILITY'; });
+    out.EDU_SELF = sum('EDUCATION', function (m) { return m.level === 'SELF' || m.level === 'DISABLED_SPECIAL'; });
+    out.EDU_PRESCHOOL = sum('EDUCATION', function (m) { return m.level === 'PRESCHOOL'; });
+    out.EDU_SCHOOL = sum('EDUCATION', function (m) { return !m.level || m.level === 'SCHOOL'; });
+    out.EDU_UNIV = sum('EDUCATION', function (m) { return m.level === 'UNIVERSITY'; });
+    var home = sum('DONATION_HOMETOWN'), low = rules.donation.hometown.lowCap;
+    out.DON_HOMETOWN = Math.min(home, low); out.DON_HOMETOWN_MORE = Math.max(0, home - low);
+    out.DON_POLITICAL = sum('DONATION_POLITICAL'); out.DON_SPECIAL = sum('DONATION_SPECIAL'); out.DON_GENERAL = sum('DONATION_GENERAL'); out.DON_RELIGIOUS = sum('DONATION_RELIGIOUS');
+    out.RENT = sum('RENT_CREDIT'); out.RENT_LOAN = sum('RENT_LOAN'); out.MORTGAGE = sum('MORTGAGE_INTEREST');
+    return out;
+  }
   function buildTaxDesign(state, rules, scenario) {
     scenario = scenario || {};
     var g = grossFromState(state);
@@ -962,9 +982,16 @@
     });
     // 2) 항목
     var catalog = designCatalog(gross, rules, year), sel = scenario.items || {};
+    var actual = designActualAmounts(state, rules);
+    var capOpt = rules.housing.mortgageInterest.capOptions.filter(function (o) { return o.key === baseProfile.mortgageCapKey; })[0];
     var rows = catalog.map(function (it) {
       var s = sel[it.key] || {};
-      var row = Object.assign({}, it, { on: s.on === undefined ? it.on : !!s.on, amount: s.amount === undefined || s.amount === null ? it.amount : num(s.amount) });
+      // 실제로 입력한 공제(공제 관리·고정지출·지출 태그)가 있으면 그 금액으로 시작하고 체크한다. 사용자가 설계에서 바꾸면 그 값을 우선
+      var act = actual[it.key] || 0;
+      var defOn = act > 0 ? true : it.on, defAmt = act > 0 ? act : it.amount;
+      var row = Object.assign({}, it, { on: s.on === undefined ? defOn : !!s.on, amount: s.amount === undefined || s.amount === null ? defAmt : num(s.amount), actual: act, fromActual: act > 0 && (s.amount === undefined || s.amount === null) });
+      if (row.fromActual) row.example = false;
+      if (it.key === 'MORTGAGE' && capOpt) row.cap = won0(capOpt.cap) + '(' + capOpt.label + ')';
       if (row.na) row.on = false;
       // 무주택 세대주 조건을 고르지 않으면 체크를 빼고 잠근다(혜택 0인데 납입액만 합계에 들어가지 않게)
       if (row.needsHomeless && !homeless) { row.on = false; row.locked = true; row.blockedReason = '조건(가정)에서 무주택 세대주를 선택하면 체크할 수 있습니다'; }
