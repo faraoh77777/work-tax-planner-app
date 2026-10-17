@@ -162,7 +162,17 @@
       }
       return '<section class="card dgroup">' + head + items + '</section>';
     }).join('');
-    shell('전체 절세 설계', planTabs('max') + top + cond + groups + '<div class="faint">규칙팩 ' + rp.version + ' · ' + L.level[rp.verificationLevel] + '. 항목별 요건(무주택, 소득요건, 장애인 등)을 충족해야 실제 공제됩니다. 세부 기준은 ' + basisLink() + '</div>');
+    // 대분류별 예상 세제혜택 합계(선택한 항목 기준) + 화면 아래 고정 합계 바
+    var gsum = d.groups.map(function (g) {
+      var on = g.items.filter(function (r) { return r.on; });
+      return { label: g.label, n: on.length, use: g.use, ded: on.reduce(function (s2, r) { return s2 + (r.deduction || 0); }, 0), saving: g.saving };
+    });
+    var totals = '<section class="card"><h3>대분류별 예상 세제혜택 합계</h3><div class="tbl-wrap"><table class="sum-table"><thead><tr><th>대분류</th><th class="num">선택</th><th class="num">사용·납입액</th><th class="num">공제금액</th><th class="num">예상 세제혜택</th></tr></thead><tbody>' +
+      gsum.map(function (x) { return '<tr' + (x.n ? '' : ' class="dim"') + '><td>' + esc(x.label) + '</td><td class="num">' + x.n + '개</td><td class="num">' + (x.use ? won(x.use) : '—') + '</td><td class="num">' + won(x.ded) + '</td><td class="num"><b>' + won(x.saving) + '</b></td></tr>'; }).join('') +
+      '</tbody><tfoot><tr><td><b>합계</b></td><td class="num"><b>' + d.selectedCount + '개</b></td><td class="num"><b>' + won(d.totalUse) + '</b></td><td class="num">—</td><td class="num"><b>' + won(d.totalSaving) + '</b></td></tr></tfoot></table></div>' +
+      '<div class="faint">세금 ' + won(d.baselineTax) + ' → ' + won(d.finalTax) + '. 공제금액은 소득공제·세액공제가 섞여 있어 합계를 내지 않습니다. 예상 세제혜택 합계 = 기준 세금 − 설계 후 세금.</div></section>';
+    var bar = '<div class="total-bar"><span>예상 세제혜택 합계</span><b>' + won(d.totalSaving) + '</b><span class="faint">세금 ' + won(d.baselineTax) + ' → ' + won(d.finalTax) + '</span></div>';
+    shell('전체 절세 설계', planTabs('max') + top + totals + cond + groups + bar + '<div class="faint">규칙팩 ' + rp.version + ' · ' + L.level[rp.verificationLevel] + '. 항목별 요건(무주택, 소득요건, 장애인 등)을 충족해야 실제 공제됩니다. 세부 기준은 ' + basisLink() + '</div>');
   }
   // 인적공제 구성 표시: 기본 150만 + 한부모 100만 처럼. 한부모·부녀자는 자동 판정이라 이유를 덧붙인다.
   function famBreakdown(r) {

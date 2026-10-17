@@ -102,3 +102,6 @@ details summary{cursor:pointer;font-weight:600;font-size:13px}
 .fam-bd{margin-top:4px;display:flex;flex-wrap:wrap;gap:4px 6px;align-items:center}
 .fam-bd .faint{flex-basis:100%}
 .chip.neg{background:var(--red-bg);color:var(--red)}
+.total-bar{position:sticky;bottom:72px;z-index:4;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;padding:10px 14px;border-radius:12px;background:var(--navy);color:#fff;box-shadow:0 4px 14px rgba(0,0,0,.18)}
+.total-bar b{font-size:18px;color:#9FE2B8}
+.total-bar .faint{color:#C9D3E0}
