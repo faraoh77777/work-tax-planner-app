@@ -106,3 +106,7 @@ details summary{cursor:pointer;font-weight:600;font-size:13px}
 .total-bar b{font-size:18px;color:#9FE2B8}
 .total-bar .faint{color:#C9D3E0}
 .sub-title{margin:14px 0 2px;font-size:14px}
+.dctl{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:6px;font-size:13px;color:var(--ink)}
+.dctl select{max-width:100%;padding:4px 6px;border:1px solid #C9D3E0;border-radius:6px;font-size:13px}
+.dgroup-ctl{padding:8px 10px;margin-top:6px;background:var(--amber-bg);border-radius:8px}
+.dgroup-ctl .dctl{margin-top:0}

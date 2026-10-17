@@ -154,11 +154,11 @@
       '<p class="muted" style="margin:6px 0 0">체크한 항목을 위에서부터 차례로 더하며 세금을 다시 계산했습니다. 체크 안 한 항목은 “선택 시 +금액”으로 추가 효과를 보여줍니다. 실제 입력(지출·공제)과 별개인 설계이며 확정 환급액이 아닙니다.</p></section>';
     if (d.taxExhausted) top += '<div class="warn"><b>세금이 0원이 되었습니다.</b><span>더 선택해도 줄일 세금이 없습니다. 혜택이 0원으로 나온 항목은 빼도 되고, 연금저축처럼 큰 금액이 드는 항목의 금액을 줄여도 결과가 같은지 확인해 보세요.</span></div>';
     if (d.estimatedPayroll) top += '<div class="faint">급여 입력이 없어 4대보험 공제는 연봉을 월할한 추정치로 넣었습니다.</div>';
-    var cond = '<section class="card"><h3>조건(가정)</h3><div class="form">' +
-      '<label class="row"><input type="checkbox" data-action="design-cond" name="homelessHead"' + (d.homelessHead ? ' checked' : '') + '>무주택 세대주(주택청약·월세·전세대출 공제 요건)</label>' +
-      '<label>중소기업 취업자 감면 구분<select data-action="design-cond" name="smeCategory">' + opts(L.sme, d.smeCategory) + '</select></label>' +
-      '<label>주택담보대출 조건(이자 공제 한도, 설정과 같은 값)<select data-action="design-cond" name="mortgageCapKey">' + (state.profile.mortgageCapKey ? '' : '<option value="" selected>미선택(설계는 첫 구간으로 가정)</option>') + rp.housing.mortgageInterest.capOptions.map(function (o) { return '<option value="' + o.key + '"' + (o.key === d.mortgageCapKey ? ' selected' : '') + '>' + esc(o.label) + ' ' + won(o.cap) + '</option>'; }).join('') + '</select></label>' +
-      '</div><div class="btns"><button class="btn small" data-action="design-reset">설계 초기화</button></div></section>';
+    // 조건은 해당 항목 옆에서 바로 고른다(위에 따로 모아두면 체크와 헷갈림)
+    var homelessCtl = function (where) { return '<label class="dctl"><input type="checkbox" data-action="design-cond" name="homelessHead"' + (d.homelessHead ? ' checked' : '') + '> 나는 <b>무주택 세대주</b>입니다' + (where ? ' <span class="faint">(' + esc(where) + ')</span>' : '') + '</label>'; };
+    var mortgageCtl = '<label class="dctl">대출 조건(한도 결정)<select data-action="design-cond" name="mortgageCapKey">' + (state.profile.mortgageCapKey ? '' : '<option value="" selected>미선택 — 대출 약정서 보고 선택</option>') + rp.housing.mortgageInterest.capOptions.map(function (o) { return '<option value="' + o.key + '"' + (state.profile.mortgageCapKey === o.key ? ' selected' : '') + '>' + esc(o.label) + ' · 한도 ' + won(o.cap) + '</option>'; }).join('') + '</select></label>';
+    var smeCtl = '<label class="dctl">감면 구분<select data-action="design-cond" name="smeCategory">' + opts(L.sme, d.smeCategory) + '</select></label>';
+    var rowCtl = { SUBSCRIPTION: homelessCtl('주거 공제와 같은 조건'), MORTGAGE: mortgageCtl, SME: smeCtl };
     function saveCell(r) {
       if (r.na) return '<span class="faint">대상 아님</span>';
       if (r.locked) return '<span class="faint">조건 필요</span>';
@@ -166,7 +166,7 @@
       return '<span class="pot">선택 시 +' + won(r.potential || 0) + '</span>';
     }
     var groups = d.groups.map(function (g) {
-      var head = '<div class="row-between dgroup-head"><h3>' + esc(g.label) + ' <span class="faint">' + esc(g.type) + '</span></h3><b class="save">' + won(g.saving) + '</b></div>';
+      var head = '<div class="row-between dgroup-head"><h3>' + esc(g.label) + ' <span class="faint">' + esc(g.type) + '</span></h3><b class="save">' + won(g.saving) + '</b></div>' + (g.key === 'HOUSING' ? '<div class="dgroup-ctl">' + homelessCtl('월세·전세대출·주택청약 공제 요건') + '</div>' : '');
       var items;
       if (g.key === 'FAMILY') {
         items = '<div class="ditem self"><span></span><div class="dmain"><b>본인</b><div class="faint">기본공제 ' + won(rp.personal.basic) + '(항상 포함, 기준 세금에 반영)</div></div><div class="dsave"></div><div class="dnums"></div></div>' +
@@ -179,7 +179,7 @@
       } else {
         items = g.items.map(function (r) {
           var amt = r.toggleOnly ? '<span class="faint">' + esc(r.cap) + '</span>' : '<input class="damt" inputmode="numeric" data-action="design-amount" data-key="' + r.key + '" value="' + Math.round(r.amount || 0).toLocaleString('ko-KR') + '"' + (r.na || r.locked ? ' disabled' : '') + '>' + (r.fromActual ? '<div class="faint">내 입력값</div>' : (r.example && !r.max ? '<div class="faint">예시 금액</div>' : ''));
-          return '<div class="ditem' + (r.on ? '' : ' off') + (r.na || r.locked ? ' na' : '') + '"><label class="dchk"><input type="checkbox" data-action="design-toggle" data-key="' + r.key + '"' + (r.on ? ' checked' : '') + (r.na || r.locked ? ' disabled' : '') + '></label><div class="dmain"><b>' + esc(r.label) + '</b><div class="faint">' + esc(r.sub) + (r.blockedReason ? ' · <span class="warn-ink">' + esc(r.blockedReason) + '</span>' : '') + '</div></div><div class="dsave">' + saveCell(r) + '</div>' +
+          return '<div class="ditem' + (r.on ? '' : ' off') + (r.na ? ' na' : '') + '"><label class="dchk"><input type="checkbox" data-action="design-toggle" data-key="' + r.key + '"' + (r.on ? ' checked' : '') + (r.na || r.locked ? ' disabled' : '') + '></label><div class="dmain"><b>' + esc(r.label) + '</b><div class="faint">' + esc(r.sub) + (r.blockedReason ? ' · <span class="warn-ink">' + esc(r.blockedReason) + '</span>' : '') + '</div>' + (rowCtl[r.key] || '') + '</div><div class="dsave">' + saveCell(r) + '</div>' +
             '<div class="dnums"><div><span>요율</span>' + esc(r.rate) + '</div><div><span>한도</span>' + esc(r.cap) + '</div><div><span>' + (r.toggleOnly ? '금액' : '사용·납입액') + '</span>' + amt + '</div><div><span>공제금액</span>' + won(r.on ? r.deduction : r.potentialDeduction) + '</div></div></div>';
         }).join('');
       }
@@ -195,7 +195,7 @@
       '</tbody><tfoot><tr><td><b>합계</b></td><td class="num"><b>' + d.selectedCount + '개</b></td><td class="num"><b>' + won(d.totalUse) + '</b></td><td class="num">—</td><td class="num"><b>' + won(d.totalSaving) + '</b></td></tr></tfoot></table></div>' +
       '<div class="faint">세금 ' + won(d.baselineTax) + ' → ' + won(d.finalTax) + '. 공제금액은 소득공제·세액공제가 섞여 있어 합계를 내지 않습니다. 예상 세제혜택 합계 = 기준 세금 − 설계 후 세금.</div></section>';
     var bar = '<div class="total-bar"><span>예상 세제혜택 합계</span><b>' + won(d.totalSaving) + '</b><span class="faint">세금 ' + won(d.baselineTax) + ' → ' + won(d.finalTax) + '</span></div>';
-    shell('전체 절세 설계', planTabs('max') + top + totals + cond + groups + bar + '<div class="faint">규칙팩 ' + rp.version + ' · ' + L.level[rp.verificationLevel] + '. 항목별 요건(무주택, 소득요건, 장애인 등)을 충족해야 실제 공제됩니다. 세부 기준은 ' + basisLink() + '</div>');
+    shell('전체 절세 설계', planTabs('max') + top + totals + groups + '<div class="btns"><button class="btn small" data-action="design-reset">설계 초기화(선택·금액 처음 상태로)</button></div>' + bar + '<div class="faint">규칙팩 ' + rp.version + ' · ' + L.level[rp.verificationLevel] + '. 항목별 요건(무주택, 소득요건, 장애인 등)을 충족해야 실제 공제됩니다. 세부 기준은 ' + basisLink() + '</div>');
   }
   // 인적공제 구성 표시: 기본 150만 + 한부모 100만 처럼. 한부모·부녀자는 자동 판정이라 이유를 덧붙인다.
   function famBreakdown(r) {
