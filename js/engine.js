@@ -691,15 +691,89 @@
       autoApplied: autoApplied,
       hasInputs: state.expenses.length > 0 || state.deductions.length > 0 || state.family.length > 0,
       baseline: base,
-      final: r3
+      final: r3,
+      extras: e3
     };
   }
+
+  /*
+   * 최적 사용 플랜 한눈에 보기(요약표). 카드 3단계 뒤에 연금계좌 → 주택청약 → 고향사랑기부를 차례로 한도까지 더하며
+   * 매번 세금을 다시 계산해 항목별 절세액을 구한다(결정세액 한도·항목 간 영향 반영, 합계 = 항목 합).
+   * maxUse = 지금부터 더 쓰거나 넣으면 혜택이 최대가 되는 금액(이미 입력한 금액 제외).
+   */
+  function buildPlanSummary(state, rules, plan) {
+    if (!plan || !plan.available) return null;
+    var rows = [];
+    plan.stages.forEach(function (s) {
+      var c = rules.card.rates;
+      var map = {
+        THRESHOLD: { label: '신용카드', sub: '최저사용액(총급여 25%)까지', rate: pctText(c.CREDIT) + '(이 구간 공제 0)', type: '소득공제' },
+        BASIC: { label: '체크카드·현금영수증', sub: '기본한도 채우기', rate: pctText(c.DEBIT), type: '소득공제' },
+        EXTRA: { label: '전통시장·대중교통', sub: '추가한도 채우기' + (plan.autoApplied.cultureEligible ? '(문화체육 ' + pctText(c.CULTURE) + ' 포함)' : ''), rate: pctText(c.TRADITIONAL_MARKET), type: '소득공제' }
+      }[s.key];
+      rows.push({ key: s.key, group: 'CARD', label: map.label, sub: map.sub, rate: map.rate, type: map.type, maxUse: s.need, deduction: s.deduction, taxSaving: s.key === 'THRESHOLD' ? 0 : s.taxSaving, conditional: false });
+    });
+    var inputs = collectDeductionInputs(state);
+    var gross = plan.gross, extras = plan.extras || [];
+    var added = [];
+    function withAdded(st, more) { return Object.assign({}, st, { deductions: (st.deductions || []).concat(more) }); }
+    function entry(cat, amount) { return { id: 'plan-' + cat, category: cat, amount: amount, beneficiaryId: 'self', meta: {} }; }
+    var prevTax = plan.final.totalTax;
+    function step(key, label, sub, rate, type, entries, maxUse, profileOverride, note) {
+      var st = withAdded(state, added.concat(entries));
+      if (profileOverride) st.profile = Object.assign({}, st.profile, { selfConditions: Object.assign({}, st.profile.selfConditions, profileOverride) });
+      var r = calc(st, rules, { extraExpenses: extras });
+      var saving = Math.max(0, prevTax - r.totalTax);
+      rows.push({ key: key, group: 'OTHER', label: label, sub: sub, rate: rate, type: type, maxUse: maxUse, deduction: 0, taxSaving: saving, conditional: !!profileOverride, note: note || '', result: r });
+      if (!profileOverride) { added = added.concat(entries); prevTax = r.totalTax; }
+      return r;
+    }
+    // 연금계좌: 연금저축 600만원 + IRP 합산 900만원 한도
+    var pa = rules.pensionAccount;
+    var curSaving = sumAmt(inputs.PENSION_SAVING), curIrp = sumAmt(inputs.IRP);
+    var addSaving = Math.max(0, Math.min(pa.savingCap, pa.totalCap - curIrp) - curSaving);
+    var addIrp = Math.max(0, pa.totalCap - Math.min(curSaving + addSaving, pa.savingCap) - curIrp);
+    var pRate = gross <= pa.grossThreshold ? pa.rateLow : pa.rateHigh;
+    var pEntries = []; if (addSaving > 0) pEntries.push(entry('PENSION_SAVING', addSaving)); if (addIrp > 0) pEntries.push(entry('IRP', addIrp));
+    var before = plan.final.pension ? plan.final.pension.credit : 0;
+    var rp = step('PENSION', '연금계좌(연금저축+IRP)', '연금저축 ' + won0(pa.savingCap) + ' 포함 합계 ' + won0(pa.totalCap) + ' 한도', pctText(pRate), '세액공제', pEntries, addSaving + addIrp);
+    rows[rows.length - 1].deduction = Math.max(0, (rp.pension ? rp.pension.credit : 0) - before);
+    // 주택청약종합저축: 총급여 7천만원 이하 + 무주택 세대주, 연 300만원 × 40% 소득공제
+    var hs = rules.housing.subscription, sc = state.profile.selfConditions || {};
+    var curSub = sumAmt(inputs.HOUSING_SUBSCRIPTION), addSub = Math.max(0, hs.annualPayCap - curSub);
+    if (gross > hs.grossCap) rows.push({ key: 'SUBSCRIPTION', group: 'OTHER', label: '주택청약종합저축', sub: '총급여 7천만원 초과 → 대상 아님', rate: pctText(hs.rate), type: '소득공제', maxUse: 0, deduction: 0, taxSaving: 0, conditional: false, na: true });
+    else {
+      var subEligible = sc.isHomeless === true && sc.isHouseholdHead === true;
+      var rs = step('SUBSCRIPTION', '주택청약종합저축', '연 ' + won0(hs.annualPayCap) + ' 납입 한도', pctText(hs.rate), '소득공제', addSub > 0 ? [entry('HOUSING_SUBSCRIPTION', addSub)] : [], addSub, subEligible ? null : { isHomeless: true, isHouseholdHead: true }, subEligible ? '' : '무주택 세대주일 때 금액(설정에서 무주택·세대주 체크 시 합계에 포함)');
+      rows[rows.length - 1].deduction = rs.housing ? Math.max(0, rs.housing.subscriptionDeduction - (plan.final.housing ? plan.final.housing.subscriptionDeduction : 0)) : fl(addSub * hs.rate);
+    }
+    // 고향사랑기부: 10만원까지 100/110 세액공제(지방소득세 포함 사실상 전액 환급), 초과분 15%
+    var dh = rules.donation.hometown, curHome = sumAmt(inputs.DONATION_HOMETOWN), addHome = Math.max(0, dh.lowCap - curHome);
+    step('HOMETOWN', '고향사랑기부', won0(dh.lowCap) + '까지(초과분 ' + pctText(dh.rate) + ')', '100/110', '세액공제', addHome > 0 ? [entry('DONATION_HOMETOWN', addHome)] : [], addHome);
+    rows[rows.length - 1].deduction = fl(addHome * dh.lowRatio);
+    var counted = rows.filter(function (r) { return !r.conditional && !r.na; });
+    return {
+      rows: rows,
+      totals: {
+        maxUse: counted.reduce(function (s, r) { return s + r.maxUse; }, 0),
+        cardMaxUse: rows.filter(function (r) { return r.group === 'CARD'; }).reduce(function (s, r) { return s + r.maxUse; }, 0),
+        incomeDeduction: counted.filter(function (r) { return r.type === '소득공제'; }).reduce(function (s, r) { return s + r.deduction; }, 0),
+        taxCredit: counted.filter(function (r) { return r.type === '세액공제'; }).reduce(function (s, r) { return s + r.deduction; }, 0),
+        taxSaving: counted.reduce(function (s, r) { return s + r.taxSaving; }, 0)
+      },
+      baselineTax: plan.baseline.totalTax,
+      finalTax: prevTax,
+      medical: plan.medical
+    };
+  }
+  function pctText(x) { return (Math.round(x * 1000) / 10) + '%'; }
+  function won0(n) { return n >= 10000 && n % 10000 === 0 ? (n / 10000).toLocaleString('ko-KR') + '만원' : Math.round(n).toLocaleString('ko-KR') + '원'; }
 
   return {
     calc: calc, calcWithExtra: calcWithExtra, computeCard: computeCard, deriveFamilyFlags: deriveFamilyFlags, derivePersonal: derivePersonal,
     estimatePremiums: estimatePremiums, mergePremiums: mergePremiums, grossFromState: grossFromState, employmentRange: employmentRange, monthsInRange: monthsInRange,
     earnedIncomeDeduction: earnedIncomeDeduction, calculatedTax: calculatedTax, earnedIncomeTaxCredit: earnedIncomeTaxCredit,
     medicalCredit: medicalCredit, educationCredit: educationCredit, donationCredits: donationCredits, pensionCredit: pensionCredit, rentCredit: rentCredit,
-    collectDeductionInputs: collectDeductionInputs, buildOptimalPlan: buildOptimalPlan, mkExtra: mkExtra, classifyExpense: classifyExpense
+    collectDeductionInputs: collectDeductionInputs, buildOptimalPlan: buildOptimalPlan, buildPlanSummary: buildPlanSummary, mkExtra: mkExtra, classifyExpense: classifyExpense
   };
 });
