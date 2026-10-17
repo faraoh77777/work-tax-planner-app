@@ -863,6 +863,43 @@
     }
     return 0;
   }
+  /*
+   * 공제 관리 화면의 항목별 예상 세제혜택: 그 항목만 뺐을 때 늘어나는 세금(소득세+지방세).
+   * 각 항목을 나머지가 모두 있는 상태에서 뺀 값이라 항목 합이 전체와 다를 수 있다(표준세액공제 전환·결정세액 한도 때문).
+   * 근로소득·표준·자녀 세액공제처럼 뺄 수 없는 자동 항목은 적용액 × (1 + 지방세율) 추정.
+   */
+  var SAVING_CATS = {
+    HOUSING: ['HOUSING_SUBSCRIPTION', 'RENT_LOAN', 'MORTGAGE_INTEREST'], INSURANCE: ['INSURANCE', 'INSURANCE_DISABLED'], MEDICAL: ['MEDICAL'], EDUCATION: ['EDUCATION'],
+    POLITICAL: ['DONATION_POLITICAL'], HOMETOWN: ['DONATION_HOMETOWN'], RENT: ['RENT_CREDIT'], DONATION_SPECIAL_GENERAL: ['DONATION_SPECIAL', 'DONATION_GENERAL', 'DONATION_RELIGIOUS'],
+    PENSION_ACCOUNT: ['PENSION_SAVING', 'IRP', 'ISA_CONVERSION']
+  };
+  function itemTaxSavings(state, rules) {
+    var base = calc(state, rules); if (base.blocked) return {};
+    function diff(st) { return Math.max(0, calc(st, rules).totalTax - base.totalTax); }
+    function without(cats) {
+      return diff(Object.assign({}, state, {
+        deductions: (state.deductions || []).filter(function (d) { return cats.indexOf(d.category) < 0; }),
+        expenses: (state.expenses || []).map(function (e) { return (e.deductionTags || []).some(function (t) { return cats.indexOf(t) >= 0; }) ? Object.assign({}, e, { deductionTags: e.deductionTags.filter(function (t) { return cats.indexOf(t) < 0; }) }) : e; })
+      }));
+    }
+    function zeroPremiums(keys) {
+      var pay = {}; Object.keys(state.payroll || {}).forEach(function (ym) { var m = state.payroll[ym], pr = Object.assign({}, m.premiums || {}); keys.forEach(function (k) { pr[k] = { amount: 0, source: 'MANUAL', status: 'OK' }; }); pay[ym] = Object.assign({}, m, { premiums: pr }); });
+      return diff(Object.assign({}, state, { payroll: pay }));
+    }
+    function withSelf(patch) { return diff(Object.assign({}, state, { profile: Object.assign({}, state.profile, { selfConditions: Object.assign({}, state.profile.selfConditions, patch) }) })); }
+    var out = {};
+    Object.keys(SAVING_CATS).forEach(function (k) { out[k] = without(SAVING_CATS[k]); });
+    out.PERSONAL_FAMILY = diff(Object.assign({}, state, { family: [] }));
+    out.PENSION_PREMIUM = zeroPremiums(['nationalPension']);
+    out.INSURANCE_PREMIUM = zeroPremiums(['healthInsurance', 'longTermCare', 'employmentInsurance']);
+    out.CARD = diff(Object.assign({}, state, { expenses: (state.expenses || []).map(function (e) { return Object.assign({}, e, { useCategory: 'EXCLUDED' }); }) }));
+    out.MARRIAGE = withSelf({ marriageRegisteredYear: null });
+    out.SME = withSelf({ smeEmployment: null });
+    var lr = 1 + rules.localIncomeTax.rate;
+    (base.credits || []).forEach(function (c) { if (['EARNED_INCOME', 'STANDARD', 'CHILD'].indexOf(c.key) >= 0) out[c.key] = Math.round(c.applied * lr); });
+    return out;
+  }
+
   // 가족 한 명을 더했을 때 인적공제가 어떤 항목으로 바뀌었는지(기본·경로우대·장애인·부녀자·한부모). 배우자를 더하면 한부모가 빠지는 것처럼 음수도 있다.
   var PERSONAL_LABELS = { basic: '기본공제', senior: '경로우대', disabled: '장애인', woman: '부녀자', singleParent: '한부모' };
   function personalBreakdown(after, before) {
@@ -970,6 +1007,6 @@
     estimatePremiums: estimatePremiums, mergePremiums: mergePremiums, grossFromState: grossFromState, employmentRange: employmentRange, monthsInRange: monthsInRange,
     earnedIncomeDeduction: earnedIncomeDeduction, calculatedTax: calculatedTax, earnedIncomeTaxCredit: earnedIncomeTaxCredit,
     medicalCredit: medicalCredit, educationCredit: educationCredit, donationCredits: donationCredits, pensionCredit: pensionCredit, rentCredit: rentCredit,
-    collectDeductionInputs: collectDeductionInputs, buildOptimalPlan: buildOptimalPlan, buildPlanSummary: buildPlanSummary, buildTaxDesign: buildTaxDesign, DESIGN_GROUPS: DESIGN_GROUPS, mkExtra: mkExtra, classifyExpense: classifyExpense
+    collectDeductionInputs: collectDeductionInputs, buildOptimalPlan: buildOptimalPlan, buildPlanSummary: buildPlanSummary, buildTaxDesign: buildTaxDesign, itemTaxSavings: itemTaxSavings, DESIGN_GROUPS: DESIGN_GROUPS, mkExtra: mkExtra, classifyExpense: classifyExpense
   };
 });

@@ -414,6 +414,7 @@
       '<label>종료 월(선택)<input type="month" name="endMonth" value="' + (t && t.endMonth ? t.endMonth : '') + '"></label>' +
       '<label>결제일<input name="paymentDay" inputmode="numeric" value="' + (t && t.paymentDay ? t.paymentDay : 1) + '"></label>' +
       '<label>주택 대출 종류<select name="loanType"><option value="">해당 없음</option><option value="RENT_LOAN"' + (loan.type === 'RENT_LOAN' ? ' selected' : '') + '>전세대출 원리금(원금+이자 40%)</option><option value="MORTGAGE"' + (loan.type === 'MORTGAGE' ? ' selected' : '') + '>주택담보대출(이자만 공제)</option></select></label>' +
+      mortgageCapSelect('주택담보대출 조건(담보대출일 때만)') +
       '<label>월 원금(대출만)<input name="principal" inputmode="numeric" value="' + (loan.principal || '') + '"></label><label>월 이자(대출만)<input name="interest" inputmode="numeric" value="' + (loan.interest || '') + '"></label>' +
       '<label class="full">메모<input name="memo" value="' + esc(t ? t.memo : '') + '"></label>' +
       (t ? '<label class="full">적용 범위<select name="mode"><option value="ALL">시작 월부터 전체(개별 수정한 월은 유지)</option><option value="FROM_REFERENCE">기준월(' + state.profile.referenceMonth + ')부터</option></select></label>' : '') +
@@ -434,17 +435,19 @@
     var r = E.calc(state, rp);
     if (r.blocked) return shell('공제 관리', '<div class="warn">총급여를 먼저 입력하세요. <a href="#/plan">플랜</a></div>');
     var P = r.personal;
-    function card(title, amount, status, lines, row, auto) {
-      return '<article class="card"><div class="row-between"><div><b>' + esc(title) + '</b> ' + badge(auto ? '자동' : '수동', auto ? '' : 'navy') + ' ' + statusBadge(status) + '</div><b>' + won(amount) + '</b></div>' + (lines || []).map(function (l) { return '<div class="muted">' + l + '</div>'; }).join('') + '<div class="row-between"><span></span>' + basisLink(row) + '</div></article>';
+    var sv = E.itemTaxSavings(state, rp);
+    // saving: 이 항목 때문에 줄어든 세금(소득세+지방세). savingLabel 로 문구를 바꿀 수 있다
+    function card(title, amount, status, lines, row, auto, saving, savingLabel) {
+      return '<article class="card"><div class="row-between"><div><b>' + esc(title) + '</b> ' + badge(auto ? '자동' : '수동', auto ? '' : 'navy') + ' ' + statusBadge(status) + '</div><b>' + won(amount) + '</b></div>' + (typeof saving === 'number' ? '<div class="row-between"><span class="faint">' + esc(savingLabel || '예상 세제혜택(소득세+지방세)') + '</span><b class="save">' + won(saving) + '</b></div>' : '') + (lines || []).map(function (l) { return '<div class="muted">' + l + '</div>'; }).join('') + '<div class="row-between"><span></span>' + basisLink(row) + '</div></article>';
     }
     var fam = P.flags.map(function (f) { return esc(f.alias || L.rel[f.relation]) + ': ' + esc(f.reasonBasic) + (f.isSenior ? ' · 경로우대' : '') + (f.isDisabled && f.isBasicDeductionTarget ? ' · 장애인' : '') + (f.isChildTaxCreditTarget ? ' · 자녀세액공제 대상' : ''); });
     var body = '<h2 class="muted" style="margin:0">소득공제</h2>' +
-      card('인적공제(기본 ' + P.basicCount + '명' + (P.seniorCount ? ', 경로 ' + P.seniorCount : '') + (P.disabledCount ? ', 장애 ' + P.disabledCount : '') + (P.singleParent ? ', 한부모' : '') + (P.woman ? ', 부녀자' : '') + ')', P.total, P.flags.some(function (f) { return f.needsConfirmation; }) ? 'CONFIRM' : 'OK', ['본인 ' + won(rp.personal.basic) + ' 포함. 입력란 없이 가족 조건으로 판정.'].concat(fam).concat(P.womanEligibleButSuppressed ? ['부녀자공제는 한부모공제와 중복 배제'] : []), 'personal', true) +
+      card('인적공제(기본 ' + P.basicCount + '명' + (P.seniorCount ? ', 경로 ' + P.seniorCount : '') + (P.disabledCount ? ', 장애 ' + P.disabledCount : '') + (P.singleParent ? ', 한부모' : '') + (P.woman ? ', 부녀자' : '') + ')', P.total, P.flags.some(function (f) { return f.needsConfirmation; }) ? 'CONFIRM' : 'OK', ['본인 ' + won(rp.personal.basic) + ' 포함. 입력란 없이 가족 조건으로 판정.'].concat(fam).concat(P.womanEligibleButSuppressed ? ['부녀자공제는 한부모공제와 중복 배제'] : []), 'personal', true, sv.PERSONAL_FAMILY, '부양가족으로 줄어든 세금(본인 기본공제 제외)') +
       card('근로소득공제', r.earnedIncomeDeduction, 'OK', ['총급여 ' + won(r.gross) + ' 구간표 적용 → 근로소득금액 ' + won(r.earnedIncome)], 'earnedIncomeDeduction', true) +
-      card('연금보험료공제(국민연금)', r.pensionPremiumDeduction, r.premiums.needsConfirm ? 'CONFIRM' : 'OK', ['월별 급여표의 국민연금 합계(수동값 우선)' + (r.premiums.unverified ? ' · 요율 미대조(확인 필요)' : '')], 'premiums', true) +
-      card('보험료 특별소득공제(건강·장기요양·고용)', r.insurancePremiumDeduction, 'OK', ['월별 급여표 합계. 표준세액공제와 비교해 유리한 쪽 적용(현재 ' + (r.standardChoice === 'STANDARD' ? '표준' : '특별') + ')'], 'premiums', true) +
-      card('주택자금·주택마련저축', r.housing.combined + r.housing.mortgageDeduction, r.housing.mortgageNote ? 'CONFIRM' : (r.housing.subscription + r.housing.rentLoan + r.housing.mortgageInterest > 0 ? 'OK' : 'NO'), ['청약 ' + won(r.housing.subscription) + ' → ' + won(r.housing.subscriptionDeduction) + (r.housing.subscription && !r.housing.subscriptionEligible ? ' (요건 미충족: 7천만원 이하·무주택 세대주)' : ''), '전세대출 원리금 ' + won(r.housing.rentLoan) + ' → ' + won(r.housing.rentLoanDeduction) + ' (청약과 합산 ' + won(rp.housing.rentLoan.combinedCapWithSubscription) + ' 한도)', '담보대출 이자 ' + won(r.housing.mortgageInterest) + ' → ' + won(r.housing.mortgageDeduction) + (r.housing.mortgageNote ? ' · ' + esc(r.housing.mortgageNote) : '')], 'housing', false) +
-      card('신용카드 등 사용액(본인 사용분' + (r.card.familyIncluded.length ? '+가족' : '') + ')', r.card.total_deduction, r.card.eligible ? 'OK' : 'NO', ['사용 ' + won(r.card.total) + ' · 최저사용액 ' + won(r.card.minUse) + ' · 공제제외금액 ' + won(r.card.excludedDeduction) + ' ' + esc(r.card.excludedCase), '일반 ' + won(r.card.general) + '/' + won(r.card.basicLimit) + ' + 추가 ' + won(r.card.extra) + '/' + won(r.card.extraLimit), '제외 지출 ' + r.card.excludedCount + '건(' + won(r.card.excludedAmount) + ')' + (r.card.outsideEmploymentCount ? ' · 재직기간 밖 ' + r.card.outsideEmploymentCount + '건' : '')], 'card', true) +
+      card('연금보험료공제(국민연금)', r.pensionPremiumDeduction, r.premiums.needsConfirm ? 'CONFIRM' : 'OK', ['월별 급여표의 국민연금 합계(수동값 우선)' + (r.premiums.unverified ? ' · 요율 미대조(확인 필요)' : '')], 'premiums', true, sv.PENSION_PREMIUM) +
+      card('보험료 특별소득공제(건강·장기요양·고용)', r.insurancePremiumDeduction, 'OK', ['월별 급여표 합계. 표준세액공제와 비교해 유리한 쪽 적용(현재 ' + (r.standardChoice === 'STANDARD' ? '표준' : '특별') + ')'], 'premiums', true, sv.INSURANCE_PREMIUM) +
+      card('주택자금·주택마련저축', r.housing.combined + r.housing.mortgageDeduction, r.housing.mortgageNote ? 'CONFIRM' : (r.housing.subscription + r.housing.rentLoan + r.housing.mortgageInterest > 0 ? 'OK' : 'NO'), ['청약 ' + won(r.housing.subscription) + ' → ' + won(r.housing.subscriptionDeduction) + (r.housing.subscription && !r.housing.subscriptionEligible ? ' (요건 미충족: 7천만원 이하·무주택 세대주)' : ''), '전세대출 원리금 ' + won(r.housing.rentLoan) + ' → ' + won(r.housing.rentLoanDeduction) + ' (청약과 합산 ' + won(rp.housing.rentLoan.combinedCapWithSubscription) + ' 한도)', '담보대출 이자 ' + won(r.housing.mortgageInterest) + ' → ' + won(r.housing.mortgageDeduction) + (r.housing.mortgageNote ? ' · ' + esc(r.housing.mortgageNote) : '')], 'housing', false, sv.HOUSING) +
+      card('신용카드 등 사용액(본인 사용분' + (r.card.familyIncluded.length ? '+가족' : '') + ')', r.card.total_deduction, r.card.eligible ? 'OK' : 'NO', ['사용 ' + won(r.card.total) + ' · 최저사용액 ' + won(r.card.minUse) + ' · 공제제외금액 ' + won(r.card.excludedDeduction) + ' ' + esc(r.card.excludedCase), '일반 ' + won(r.card.general) + '/' + won(r.card.basicLimit) + ' + 추가 ' + won(r.card.extra) + '/' + won(r.card.extraLimit), '제외 지출 ' + r.card.excludedCount + '건(' + won(r.card.excludedAmount) + ')' + (r.card.outsideEmploymentCount ? ' · 재직기간 밖 ' + r.card.outsideEmploymentCount + '건' : '')], 'card', true, sv.CARD) +
       (r.overallCap.excess ? '<div class="warn">소득공제 종합한도 ' + won(r.overallCap.cap) + ' 초과분 ' + won(r.overallCap.excess) + '은 과세표준에 가산</div>' : '') +
       '<h2 class="muted" style="margin:0">세액공제·감면</h2>';
     r.credits.forEach(function (c) {
@@ -459,20 +462,26 @@
       if (c.note) extra.push(esc(c.note));
       var st = c.applied > 0 ? 'OK' : (c.key === 'RENT' && r.rent.needsConfirm && r.rent.amount > 0 ? 'CONFIRM' : 'NO');
       var auto = ['EARNED_INCOME', 'MARRIAGE', 'CHILD', 'STANDARD'].indexOf(c.key) >= 0;
-      body += card(c.label, c.applied, st, extra.concat(c.raw !== c.applied ? ['산출 ' + won(c.raw) + ' 중 ' + won(c.applied) + ' 적용(산출세액 범위)'] : []), c.key.toLowerCase(), auto);
+      body += card(c.label, c.applied, st, extra.concat(c.raw !== c.applied ? ['산출 ' + won(c.raw) + ' 중 ' + won(c.applied) + ' 적용(산출세액 범위)'] : []), c.key.toLowerCase(), auto, sv[c.key], ['EARNED_INCOME', 'STANDARD', 'CHILD'].indexOf(c.key) >= 0 ? '예상 세제혜택(지방세 포함 추정)' : null);
     });
-    body += card('중소기업 취업자 소득세 감면', r.sme.amount, r.sme.active ? 'OK' : 'NO', [esc(r.sme.reason)], 'smeReduction', true);
+    body += card('중소기업 취업자 소득세 감면', r.sme.amount, r.sme.active ? 'OK' : 'NO', [esc(r.sme.reason)], 'smeReduction', true, sv.SME);
     body += '<article class="card"><b>미지원 항목</b><div class="muted">개인연금저축(2000년 이전 가입), 소기업·소상공인 공제부금, 투자조합·우리사주·고용유지·장기집합투자, 납세조합·주택차입금이자(1995~97)·외국납부 ' + badge('미지원', 'red') + '</div></article>';
     body += manualDeductionForm();
     shell('공제 관리', body);
   }
 
+  // 주택담보대출 이자 공제 한도 구간 선택(설정과 같은 값을 공유). 미선택이면 이자 공제 0 + 확인 필요
+  function mortgageCapSelect(label) {
+    var rp = rules(); if (!rp) return '';
+    return '<label class="full">' + esc(label || '주택담보대출 조건(이자 공제 한도)') + '<select data-action="mortgage-cap"><option value="">미선택(이자 공제 0, 확인 필요)</option>' + rp.housing.mortgageInterest.capOptions.map(function (o) { return '<option value="' + o.key + '"' + (state.profile.mortgageCapKey === o.key ? ' selected' : '') + '>' + esc(o.label) + ' ' + won(o.cap) + '</option>'; }).join('') + '</select><span class="faint">대출 약정서의 상환기간·금리·거치 여부로 고릅니다. 설정 화면과 같은 값입니다.</span></label>';
+  }
   function manualDeductionForm() {
     var cat = ui.dedCategory || 'MEDICAL';
     var meta = '';
     if (cat === 'MEDICAL') meta = '<label>대상자 그룹<select name="group">' + opts(L.medGroup, 'GENERAL') + '</select></label><label>종류<select name="kind">' + opts(L.medKind, 'NORMAL') + '</select></label><label>실손보험 보전액(원)<input name="reimbursed" inputmode="numeric" value="0"></label>';
     if (cat === 'EDUCATION') meta = '<label>대상 구분<select name="level">' + opts(L.eduLevel, 'SCHOOL') + '</select></label><label>종류<select name="kind">' + opts(L.eduKind, 'NORMAL') + '</select></label>';
     if (cat === 'DONATION_HOMETOWN') meta = '<label class="row"><input type="checkbox" name="disaster">특별재난지역 기부(30%)</label>';
+    if (cat === 'MORTGAGE_INTEREST') meta = mortgageCapSelect() + '<div class="faint full">금액은 올해 낸 <b>이자</b>만 입력합니다(원금 제외). 요건: 무주택 또는 1주택 세대주, 취득 당시 기준시가 6억원 이하.</div>';
     var list = (state.deductions || []).map(function (d) { var who = d.beneficiaryId === 'self' || !d.beneficiaryId ? '본인' : (function () { var f = state.family.find(function (y) { return y.id === d.beneficiaryId; }); return f ? (f.alias || L.rel[f.relation]) : d.beneficiaryId; })(); return '<tr><td>' + esc(L.tag[d.category] || d.category) + '</td><td>' + esc(who) + '</td><td class="num">' + won(d.amount) + '</td><td class="faint">' + esc(Object.keys(d.meta || {}).map(function (k) { return k + '=' + d.meta[k]; }).join(' ')) + '</td><td>' + (d.evidence ? badge('증빙 확인', 'green') : badge('증빙 미확인', 'gray')) + '</td><td><button class="btn small danger" data-action="del-deduction" data-id="' + d.id + '">삭제</button></td></tr>'; }).join('');
     return '<section class="card"><h3>공제 항목 수동 입력(연간 합계 또는 건별)</h3><form data-form="deduction" class="form"><label>항목<select name="category" data-action="ded-category">' + opts(L.tag, cat) + '</select></label><label>금액(원)<input name="amount" inputmode="numeric" required></label><label>대상자<select name="beneficiaryId">' + familyOpts('self') + '</select></label>' + meta + '<label class="row full"><input type="checkbox" name="evidence">증빙(간소화 자료 등) 확인함</label><div class="full btns"><button class="btn primary" type="submit">추가</button></div></form><div class="faint">월별로 반복되는 보험료·연금·월세는 입력 화면의 고정지출 템플릿으로 등록하면 자동 생성됩니다.</div><div class="tbl-wrap"><table><thead><tr><th>항목</th><th>대상자</th><th class="num">금액</th><th>세부</th><th>증빙</th><th></th></tr></thead><tbody>' + (list || '<tr><td colspan="6" class="muted">수동 입력 항목 없음</td></tr>') + '</tbody></table></div></section>';
   }
@@ -720,6 +729,7 @@
     if (pf) { saveProfile(pf, el.name === 'year'); return; }
     if (act === 'filter-month') { ui.expenseMonth = el.value; render(); }
     if (act === 'ded-category') { ui.dedCategory = el.value; render(); }
+    if (act === 'mortgage-cap') { state.profile.mortgageCapKey = el.value || null; var y0 = window.scrollY; persist().then(function (ok) { if (ok) toast(el.value ? '대출 조건 저장됨 · 전체 재계산' : '대출 조건 미선택'); render(); window.scrollTo(0, y0); }); return; }
     if (act === 'design-toggle') { scenarioItem(el.getAttribute('data-key')).on = el.checked; saveScenario(); return; }
     if (act === 'design-amount') { var v = num(el.value); if (v === null || v < 0) { toast('금액을 숫자로 입력하세요', true); return; } scenarioItem(el.getAttribute('data-key')).amount = v; saveScenario(); return; }
     if (act === 'design-cond') { state.scenario[el.name] = el.type === 'checkbox' ? el.checked : el.value; saveScenario(); return; }
