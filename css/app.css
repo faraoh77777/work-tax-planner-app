@@ -99,3 +99,6 @@ details summary{cursor:pointer;font-weight:600;font-size:13px}
 .toast.err{background:var(--red)}
 .inline-confirm{border:1px solid var(--red);border-radius:10px;padding:10px;background:var(--red-bg);display:flex;flex-direction:column;gap:8px}
 @media (min-width:768px){main{padding-bottom:100px}.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}}
+.fam-bd{margin-top:4px;display:flex;flex-wrap:wrap;gap:4px 6px;align-items:center}
+.fam-bd .faint{flex-basis:100%}
+.chip.neg{background:var(--red-bg);color:var(--red)}

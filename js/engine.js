@@ -863,6 +863,12 @@
     }
     return 0;
   }
+  // 가족 한 명을 더했을 때 인적공제가 어떤 항목으로 바뀌었는지(기본·경로우대·장애인·부녀자·한부모). 배우자를 더하면 한부모가 빠지는 것처럼 음수도 있다.
+  var PERSONAL_LABELS = { basic: '기본공제', senior: '경로우대', disabled: '장애인', woman: '부녀자', singleParent: '한부모' };
+  function personalBreakdown(after, before) {
+    var a = after.personal.amounts, b = before.personal.amounts;
+    return Object.keys(PERSONAL_LABELS).map(function (k) { return { key: k, label: PERSONAL_LABELS[k], amount: (a[k] || 0) - (b[k] || 0) }; }).filter(function (x) { return x.amount !== 0; });
+  }
   function buildTaxDesign(state, rules, scenario) {
     scenario = scenario || {};
     var g = grossFromState(state);
@@ -911,6 +917,7 @@
       if (x.on) {
         var nxt = add(cur, { family: [x.m] }), r = build(nxt);
         row.deduction = Math.max(0, designMetric(r, 'personal') - designMetric(prevR, 'personal'));
+        row.breakdown = personalBreakdown(r, prevR);
         row.creditNote = (r.child.credit + r.child.birthAdoption) - (prevR.child.credit + prevR.child.birthAdoption);
         row.saving = Math.max(0, prevTax - r.totalTax); cur = nxt; prevTax = r.totalTax; prevR = r;
       }
@@ -939,6 +946,7 @@
       var r = build(add(cur, part));
       row.potential = Math.max(0, finalR.totalTax - r.totalTax);
       row.potentialDeduction = Math.max(0, designMetric(r, row.group === 'FAMILY' ? 'personal' : row.metric) - designMetric(finalR, row.group === 'FAMILY' ? 'personal' : row.metric));
+      if (row.group === 'FAMILY') row.breakdown = personalBreakdown(r, finalR);
     });
     var groups = DESIGN_GROUPS.map(function (gr) {
       var items = gr.key === 'FAMILY' ? famRows : rows.filter(function (r) { return r.group === gr.key; });

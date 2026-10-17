@@ -150,7 +150,7 @@
           g.items.map(function (r) {
             var who = (r.alias || r.label || L.rel[r.relation]) + ' · ' + L.rel[r.relation] + (r.birthYear ? ' · ' + r.birthYear + '년생' : '');
             var why = r.flag ? (r.flag.isBasicDeductionTarget ? '기본공제 대상' + (r.flag.isSenior ? ' · 경로우대' : '') + (r.flag.isDisabled ? ' · 장애인' : '') + (r.flag.isChildTaxCreditTarget ? ' · 자녀세액공제' : '') : r.flag.reasonBasic) : '';
-            return '<div class="ditem' + (r.on ? '' : ' off') + '"><label class="dchk"><input type="checkbox" data-action="design-fam" data-id="' + esc(r.id) + '"' + (r.virtual ? ' data-virtual="1"' : '') + (r.on ? ' checked' : '') + '></label><div class="dmain"><b>' + esc(who) + '</b> ' + (r.virtual ? badge('가상', 'gray') + ' <button class="btn link" data-action="design-fam-del" data-id="' + esc(r.id) + '">삭제</button>' : badge('내 가족', 'navy')) + '<div class="faint">' + esc(why) + (r.on && r.creditNote ? ' · 자녀·출산 세액공제 +' + won(r.creditNote) : '') + '</div></div><div class="dsave">' + saveCell(r) + '</div><div class="dnums"><div><span>공제금액</span>' + won(r.on ? r.deduction : r.potentialDeduction) + '</div></div></div>';
+            return '<div class="ditem' + (r.on ? '' : ' off') + '"><label class="dchk"><input type="checkbox" data-action="design-fam" data-id="' + esc(r.id) + '"' + (r.virtual ? ' data-virtual="1"' : '') + (r.on ? ' checked' : '') + '></label><div class="dmain"><b>' + esc(who) + '</b> ' + (r.virtual ? badge('가상', 'gray') + ' <button class="btn link" data-action="design-fam-del" data-id="' + esc(r.id) + '">삭제</button>' : badge('내 가족', 'navy')) + '<div class="faint">' + esc(why) + (r.on && r.creditNote ? ' · 자녀·출산 세액공제 +' + won(r.creditNote) : '') + '</div>' + famBreakdown(r) + '</div><div class="dsave">' + saveCell(r) + '</div><div class="dnums"><div><span>공제금액</span>' + won(r.on ? r.deduction : r.potentialDeduction) + '</div></div></div>';
           }).join('') +
           '<form data-form="design-family" class="form dadd"><b class="full">부양가족 추가(가상)</b><label>관계<select name="relation">' + opts(L.rel, 'LINEAL_ASCENDANT') + '</select></label><label>별칭<input name="alias" placeholder="예: 어머니"></label><label>출생연도<input name="birthYear" inputmode="numeric" placeholder="예: 1955" required></label><label class="row"><input type="checkbox" name="disability">장애인</label><label class="row"><input type="checkbox" name="born">올해 출생·입양</label><label>자녀 순번(출생·입양 시)<select name="childOrder"><option value="">-</option><option value="1">첫째</option><option value="2">둘째</option><option value="3">셋째 이상</option></select></label><div class="faint full">연소득 100만원 이하(근로소득만 있으면 총급여 500만원 이하)라고 가정합니다. 실제 가족은 설정에서 입력하세요.</div><div class="full btns"><button class="btn" type="submit">가족 추가</button></div></form>';
       } else {
@@ -163,6 +163,13 @@
       return '<section class="card dgroup">' + head + items + '</section>';
     }).join('');
     shell('전체 절세 설계', planTabs('max') + top + cond + groups + '<div class="faint">규칙팩 ' + rp.version + ' · ' + L.level[rp.verificationLevel] + '. 항목별 요건(무주택, 소득요건, 장애인 등)을 충족해야 실제 공제됩니다. 세부 기준은 ' + basisLink() + '</div>');
+  }
+  // 인적공제 구성 표시: 기본 150만 + 한부모 100만 처럼. 한부모·부녀자는 자동 판정이라 이유를 덧붙인다.
+  function famBreakdown(r) {
+    var b = r.breakdown || []; if (!b.length) return '';
+    var why = { singleParent: '배우자 없이 기본공제 대상 자녀가 있어 자동 적용', woman: '여성 근로자 요건 충족으로 자동 적용' };
+    return '<div class="fam-bd">' + b.map(function (x) { return '<span class="chip' + (x.amount < 0 ? ' neg' : '') + '">' + esc(x.label) + ' ' + (x.amount > 0 ? '+' : '−') + won(Math.abs(x.amount)) + '</span>'; }).join('') +
+      b.filter(function (x) { return why[x.key]; }).map(function (x) { return '<div class="faint">' + esc(x.label) + (x.amount > 0 ? ' 공제 포함: ' + why[x.key] : ' 공제 제외: 이 가족을 넣으면 요건에서 빠짐(예: 배우자 추가 시 한부모 공제 대신 배우자 기본공제)') + '</div>'; }).join('') + '</div>';
   }
   function saveScenario() { var y = window.scrollY; return persist().then(function () { render(); window.scrollTo(0, y); }); }
   function scenarioItem(key) { state.scenario.items = state.scenario.items || {}; return (state.scenario.items[key] = state.scenario.items[key] || {}); }
