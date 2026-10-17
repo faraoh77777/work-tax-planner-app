@@ -54,6 +54,24 @@ td.num,th.num{text-align:right;white-space:nowrap}
 .sum-nums{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:5px;font-size:13px;font-weight:600}
 .sum-nums span{display:block;font-size:11px;font-weight:400;color:var(--faint)}
 @media (max-width:600px){.sum-list{display:block}.sum-wide{display:none}}
+.dgroup-head h3{margin:0}
+.dgroup-head{padding-bottom:6px;border-bottom:2px solid var(--ink)}
+.ditem{display:grid;grid-template-columns:24px minmax(0,1.5fr) minmax(0,2.6fr) 120px;grid-template-areas:"chk main nums save";gap:6px 10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
+.ditem .dchk{grid-area:chk}.ditem .dmain{grid-area:main}.ditem .dnums{grid-area:nums}.ditem .dsave{grid-area:save;text-align:right}
+.ditem.off .dmain b,.ditem.off .dnums{color:var(--faint)}
+.ditem.na{opacity:.5}
+.ditem.self{background:var(--bg)}
+.dnums{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;font-size:13px}
+.dnums span{display:block;font-size:11px;color:var(--faint)}
+.damt{width:100%;max-width:130px;padding:4px 6px;border:1px solid #C9D3E0;border-radius:6px;font-size:13px;text-align:right}
+.save{color:var(--green);white-space:nowrap}
+.pot{color:var(--blue);font-size:12px;white-space:nowrap}
+.warn-ink{color:var(--amber)}
+.dadd{margin-top:10px;padding:10px;border:1px dashed #C9D3E0;border-radius:10px}
+@media (max-width:600px){
+  .ditem{grid-template-columns:24px minmax(0,1fr) auto;grid-template-areas:"chk main save" ". nums nums"}
+  .dnums{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
 .section-title{font-size:15px;margin:6px 2px 0;color:var(--muted)}
 .dark{background:var(--navy);color:#fff;border-color:var(--navy)}
 .dark h2{color:#C9D3E0}

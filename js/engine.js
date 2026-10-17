@@ -766,6 +766,194 @@
       medical: plan.medical
     };
   }
+  /*
+   * 전체 절세 설계(시뮬레이션). 실제 입력(지출·공제)과 별개로, 연봉만 있는 상태(기준)에서
+   * 선택한 부양가족 → 선택한 항목을 대분류 순서대로 더하며 매번 세금을 다시 계산한다.
+   * scenario: { family: {가족id: false면 제외}, extraFamily: [가상 부양가족], items: {key: {on, amount}},
+   *             homelessHead, smeCategory, mortgageCapKey }
+   * 선택 안 한 항목은 "선택하면 더 줄어드는 세금"(potential)을 최종 상태에 하나만 더해 계산한다.
+   */
+  var DESIGN_GROUPS = [
+    { key: 'FAMILY', label: '인적공제(부양가족)', type: '소득공제' },
+    { key: 'CARD', label: '신용카드 등 사용', type: '소득공제' },
+    { key: 'SAVING', label: '연금·저축', type: '세액·소득공제' },
+    { key: 'INSURANCE', label: '보험료', type: '세액공제' },
+    { key: 'MEDICAL', label: '의료비', type: '세액공제' },
+    { key: 'EDUCATION', label: '교육비', type: '세액공제' },
+    { key: 'DONATION', label: '기부금', type: '세액공제' },
+    { key: 'HOUSING', label: '주거(월세·전세·주택대출)', type: '세액·소득공제' },
+    { key: 'OTHER', label: '기타 공제·감면', type: '세액공제·감면' }
+  ];
+  function designCatalog(gross, rules, year) {
+    var c = rules.card, lim = c.limitTiers.filter(function (t) { return t.grossUpTo === null || gross <= t.grossUpTo; })[0];
+    var minUse = fl(gross * c.minUseRate), pa = rules.pensionAccount, md = rules.medical, ed = rules.education, dn = rules.donation, hs = rules.housing, rt = rules.rent;
+    var medThr = fl(gross * md.thresholdRate), pRate = gross <= pa.grossThreshold ? pa.rateLow : pa.rateHigh;
+    var cultureOk = gross <= c.cultureGrossCap, rentRate = gross <= rt.lowGrossCap ? rt.lowRate : rt.rate;
+    var M = function (o) { return o; };
+    return [
+      M({ key: 'CARD_CREDIT', group: 'CARD', label: '신용카드', sub: '최저사용액(총급여 25%)까지는 어떤 수단이든 공제 0 — 신용카드로 채워도 손해 없음', rate: pctText(c.rates.CREDIT), cap: '최저사용액 ' + won0(minUse), on: true, amount: minUse, metric: 'card' }),
+      M({ key: 'CARD_DEBIT', group: 'CARD', label: '체크카드·현금영수증', sub: '최저사용액을 넘긴 뒤 기본한도 채우기', rate: pctText(c.rates.DEBIT), cap: '기본한도 ' + won0(lim.basic), on: true, amount: ceilTo(lim.basic / c.rates.DEBIT, 10000), metric: 'card' }),
+      M({ key: 'CARD_MARKET', group: 'CARD', label: '전통시장', sub: '추가한도(시장·교통·문화 합산)', rate: pctText(c.rates.TRADITIONAL_MARKET), cap: '추가한도 ' + won0(lim.extra), on: true, amount: ceilTo(lim.extra / c.rates.TRADITIONAL_MARKET, 10000), metric: 'card' }),
+      M({ key: 'CARD_TRANSIT', group: 'CARD', label: '대중교통', sub: '전통시장과 추가한도를 함께 씀(이미 다 채웠으면 효과 없음)', rate: pctText(c.rates.PUBLIC_TRANSIT), cap: '추가한도 합산', on: false, amount: 1200000, metric: 'card' }),
+      M({ key: 'CARD_CULTURE', group: 'CARD', label: '문화체육(도서·공연·영화·수영장·헬스)', sub: cultureOk ? '추가한도 합산' : '총급여 7천만원 초과 → 대상 아님', rate: pctText(c.rates.CULTURE), cap: '추가한도 합산', on: false, amount: 1000000, na: !cultureOk, metric: 'card' }),
+      M({ key: 'PENSION_SAVING', group: 'SAVING', label: '연금저축', sub: '연금계좌 세액공제(IRP와 합산 ' + won0(pa.totalCap) + ')', rate: pctText(pRate), cap: won0(pa.savingCap), on: true, amount: pa.savingCap, max: pa.savingCap, metric: 'pension', type: '세액공제' }),
+      M({ key: 'IRP', group: 'SAVING', label: 'IRP(개인형 퇴직연금)', sub: '연금저축과 합산 ' + won0(pa.totalCap) + ' 한도', rate: pctText(pRate), cap: won0(pa.totalCap - pa.savingCap) + '(합산 기준)', on: true, amount: pa.totalCap - pa.savingCap, max: pa.totalCap, metric: 'pension', type: '세액공제' }),
+      M({ key: 'ISA', group: 'SAVING', label: 'ISA 만기 연금계좌 전환', sub: '전환액의 10%, 최대 ' + won0(pa.isaConversion.cap) + ' 추가', rate: pctText(pRate), cap: '전환 ' + won0(pa.isaConversion.cap / pa.isaConversion.rate), on: false, amount: fl(pa.isaConversion.cap / pa.isaConversion.rate), metric: 'pension', type: '세액공제' }),
+      M({ key: 'SUBSCRIPTION', group: 'SAVING', label: '주택청약종합저축', sub: gross > hs.subscription.grossCap ? '총급여 7천만원 초과 → 대상 아님' : '무주택 세대주만(아래 조건에서 선택)', rate: pctText(hs.subscription.rate), cap: won0(hs.subscription.annualPayCap), on: true, amount: hs.subscription.annualPayCap, max: hs.subscription.annualPayCap, na: gross > hs.subscription.grossCap, needsHomeless: true, metric: 'housing', type: '소득공제' }),
+      M({ key: 'INSURANCE', group: 'INSURANCE', label: '보장성보험(자동차·실손·종신 등)', sub: '연 100만원 한도', rate: pctText(rules.insurance.rate), cap: won0(rules.insurance.cap), on: true, amount: rules.insurance.cap, max: rules.insurance.cap, metric: 'insurance' }),
+      M({ key: 'INSURANCE_DISABLED', group: 'INSURANCE', label: '장애인전용 보장성보험', sub: '장애인 피보험자', rate: pctText(rules.insurance.disabledRate), cap: won0(rules.insurance.disabledCap), on: false, amount: rules.insurance.disabledCap, max: rules.insurance.disabledCap, metric: 'insurance' }),
+      M({ key: 'MED_SELF', group: 'MEDICAL', label: '본인·65세 이상·6세 이하·장애인', sub: '한도 없음. 총급여 3%(' + won0(medThr) + ') 넘는 금액부터', rate: pctText(md.rate), cap: '한도 없음', on: false, amount: ceilTo(medThr + 1000000, 10000), metric: 'medical', example: true }),
+      M({ key: 'MED_GENERAL', group: 'MEDICAL', label: '그 외 부양가족', sub: '공제대상 ' + won0(md.generalCap) + ' 한도', rate: pctText(md.rate), cap: won0(md.generalCap) + '(문턱 초과분)', on: false, amount: ceilTo(medThr + 1000000, 10000), metric: 'medical', example: true }),
+      M({ key: 'MED_INFERTILITY', group: 'MEDICAL', label: '난임시술비', sub: '한도 없음', rate: pctText(md.infertilityRate), cap: '한도 없음', on: false, amount: 3000000, metric: 'medical', example: true }),
+      M({ key: 'MED_GLASSES', group: 'MEDICAL', label: '안경·콘택트렌즈', sub: '1인 50만원까지 의료비에 포함', rate: pctText(md.rate), cap: won0(md.glassesCapPerPerson) + '/인', on: false, amount: md.glassesCapPerPerson, max: md.glassesCapPerPerson, metric: 'medical' }),
+      M({ key: 'EDU_SELF', group: 'EDUCATION', label: '본인(대학원·직업훈련 등)', sub: '한도 없음', rate: pctText(ed.rate), cap: '한도 없음', on: false, amount: 3000000, metric: 'education', example: true }),
+      M({ key: 'EDU_PRESCHOOL', group: 'EDUCATION', label: '취학 전 아동(어린이집·유치원·학원)', sub: '1인당', rate: pctText(ed.rate), cap: won0(ed.caps.PRESCHOOL) + '/인', on: false, amount: ed.caps.PRESCHOOL, max: ed.caps.PRESCHOOL, metric: 'education' }),
+      M({ key: 'EDU_SCHOOL', group: 'EDUCATION', label: '초·중·고(학원비 제외)', sub: '1인당', rate: pctText(ed.rate), cap: won0(ed.caps.SCHOOL) + '/인', on: false, amount: ed.caps.SCHOOL, max: ed.caps.SCHOOL, metric: 'education' }),
+      M({ key: 'EDU_UNIV', group: 'EDUCATION', label: '대학생', sub: '1인당', rate: pctText(ed.rate), cap: won0(ed.caps.UNIVERSITY) + '/인', on: false, amount: ed.caps.UNIVERSITY, max: ed.caps.UNIVERSITY, metric: 'education' }),
+      M({ key: 'DON_HOMETOWN', group: 'DONATION', label: '고향사랑기부(10만원까지)', sub: '100/110 공제 + 지방세 → 사실상 전액 환급, 답례품 별도', rate: '100/110', cap: won0(dn.hometown.lowCap), on: true, amount: dn.hometown.lowCap, max: dn.hometown.lowCap, metric: 'donation' }),
+      M({ key: 'DON_HOMETOWN_MORE', group: 'DONATION', label: '고향사랑기부 추가분', sub: '10만원 초과분, 연 ' + won0(dn.hometown.annualCap) + '까지', rate: pctText(dn.hometown.rate), cap: won0(dn.hometown.annualCap - dn.hometown.lowCap), on: false, amount: 400000, max: dn.hometown.annualCap - dn.hometown.lowCap, metric: 'donation', example: true }),
+      M({ key: 'DON_POLITICAL', group: 'DONATION', label: '정치자금 기부(10만원까지)', sub: '100/110 공제', rate: '100/110', cap: won0(dn.political.lowCap), on: false, amount: dn.political.lowCap, metric: 'donation' }),
+      M({ key: 'DON_SPECIAL', group: 'DONATION', label: '특례기부금(국가·재난·대학 등)', sub: '근로소득금액 100% 한도', rate: pctText(dn.special.lowRate) + '(1천만원 초과 ' + pctText(dn.special.highRate) + ')', cap: '소득 100%', on: false, amount: 1000000, metric: 'donation', example: true }),
+      M({ key: 'DON_GENERAL', group: 'DONATION', label: '일반기부금(종교 외)', sub: '근로소득금액 30% 한도', rate: pctText(dn.general.lowRate), cap: '소득 30%', on: false, amount: 1000000, metric: 'donation', example: true }),
+      M({ key: 'DON_RELIGIOUS', group: 'DONATION', label: '종교단체 기부금', sub: '근로소득금액 10% 한도', rate: pctText(dn.religious.lowRate), cap: '소득 10%', on: false, amount: 1000000, metric: 'donation', example: true }),
+      M({ key: 'RENT', group: 'HOUSING', label: '월세 세액공제', sub: gross > rt.grossCap ? '총급여 8천만원 초과 → 대상 아님' : '무주택 세대주, 국민주택규모·기준시가 4억 이하', rate: pctText(rentRate), cap: won0(rt.rentCap), on: false, amount: 6000000, max: rt.rentCap, na: gross > rt.grossCap, needsHomeless: true, metric: 'rent', example: true }),
+      M({ key: 'RENT_LOAN', group: 'HOUSING', label: '전세대출 원리금 상환', sub: '무주택 세대주, 청약과 합산 공제 ' + won0(hs.rentLoan.combinedCapWithSubscription), rate: pctText(hs.rentLoan.rate), cap: '공제 ' + won0(hs.rentLoan.combinedCapWithSubscription), on: false, amount: 10000000, needsHomeless: true, metric: 'housing', type: '소득공제', example: true }),
+      M({ key: 'MORTGAGE', group: 'HOUSING', label: '주택담보대출 이자', sub: '무주택·1주택 세대주, 취득 당시 기준시가 6억 이하. 한도는 아래 조건의 대출 조건', rate: '100%(소득공제)', cap: '조건별 600만~2천만원', on: false, amount: 8000000, metric: 'mortgage', type: '소득공제', example: true }),
+      M({ key: 'MARRIAGE', group: 'OTHER', label: '혼인세액공제', sub: '올해 혼인신고(' + rules.marriageCredit.yearsFrom + '~' + rules.marriageCredit.yearsTo + ', 생애 1회)', rate: '정액', cap: won0(rules.marriageCredit.amount), on: false, toggleOnly: true, metric: 'marriage' }),
+      M({ key: 'SME', group: 'OTHER', label: '중소기업 취업자 소득세 감면', sub: '청년 90%(5년)·60세 이상·장애인·경력단절 70%(3년), 연 200만원 한도 — 구분은 아래 조건', rate: '70~90%', cap: '연 200만원', on: false, toggleOnly: true, metric: 'sme', type: '감면' })
+    ].map(function (it) { it.type = it.type || DESIGN_GROUPS.filter(function (g) { return g.key === it.group; })[0].type; return it; });
+  }
+  function designItemParts(it, amount, year) {
+    var a = Math.max(0, num(amount));
+    switch (it.key) {
+      case 'CARD_CREDIT': return { extras: a ? [mkExtra('d-cc', a, 'CREDIT', 'GENERAL', year + '-12-31')] : [] };
+      case 'CARD_DEBIT': return { extras: a ? [mkExtra('d-cd', a, 'DEBIT', 'GENERAL', year + '-12-31')] : [] };
+      case 'CARD_MARKET': return { extras: a ? [mkExtra('d-cm', a, 'DEBIT', 'TRADITIONAL_MARKET', year + '-12-31')] : [] };
+      case 'CARD_TRANSIT': return { extras: a ? [mkExtra('d-ct', a, 'DEBIT', 'PUBLIC_TRANSIT', year + '-12-31')] : [] };
+      case 'CARD_CULTURE': return { extras: a ? [mkExtra('d-cu', a, 'DEBIT', 'CULTURE', year + '-12-31')] : [] };
+    }
+    var map = {
+      PENSION_SAVING: ['PENSION_SAVING'], IRP: ['IRP'], ISA: ['ISA_CONVERSION'], SUBSCRIPTION: ['HOUSING_SUBSCRIPTION'],
+      INSURANCE: ['INSURANCE'], INSURANCE_DISABLED: ['INSURANCE_DISABLED'],
+      MED_SELF: ['MEDICAL', { group: 'UNLIMITED' }], MED_GENERAL: ['MEDICAL', { group: 'GENERAL' }, 'd-dep'], MED_INFERTILITY: ['MEDICAL', { group: 'INFERTILITY' }], MED_GLASSES: ['MEDICAL', { group: 'UNLIMITED', kind: 'GLASSES' }],
+      EDU_SELF: ['EDUCATION', { level: 'SELF' }], EDU_PRESCHOOL: ['EDUCATION', { level: 'PRESCHOOL' }, 'd-kid1'], EDU_SCHOOL: ['EDUCATION', { level: 'SCHOOL' }, 'd-kid2'], EDU_UNIV: ['EDUCATION', { level: 'UNIVERSITY' }, 'd-kid3'],
+      DON_HOMETOWN: ['DONATION_HOMETOWN'], DON_HOMETOWN_MORE: ['DONATION_HOMETOWN'], DON_POLITICAL: ['DONATION_POLITICAL'], DON_SPECIAL: ['DONATION_SPECIAL'], DON_GENERAL: ['DONATION_GENERAL'], DON_RELIGIOUS: ['DONATION_RELIGIOUS'],
+      RENT: ['RENT_CREDIT'], RENT_LOAN: ['RENT_LOAN'], MORTGAGE: ['MORTGAGE_INTEREST']
+    }[it.key];
+    if (map) return { entries: a ? [{ id: 'd-' + it.key, category: map[0], amount: a, beneficiaryId: map[2] || 'self', meta: map[1] || {} }] : [] };
+    if (it.key === 'MARRIAGE') return { profile: { marriageRegisteredYear: year } };
+    if (it.key === 'SME') return { sme: true };
+    return {};
+  }
+  function designMetric(r, metric) {
+    if (!r || r.blocked) return 0;
+    switch (metric) {
+      case 'card': return r.card.total_deduction;
+      case 'pension': return r.pension.credit;
+      case 'housing': return r.housing.combined;
+      case 'mortgage': return r.housing.mortgageDeduction;
+      case 'insurance': return r.insurance.credit;
+      case 'medical': return r.medical.credit;
+      case 'education': return r.education.credit;
+      case 'donation': return r.donation.political + r.donation.hometown + r.donation.specialGeneral;
+      case 'rent': return r.rent.credit;
+      case 'marriage': return r.marriage.amount;
+      case 'sme': return r.sme ? r.sme.amount : 0;
+      case 'personal': return r.personal.total;
+    }
+    return 0;
+  }
+  function buildTaxDesign(state, rules, scenario) {
+    scenario = scenario || {};
+    var g = grossFromState(state);
+    if (g.gross === null) return { available: false, missing: g.missing };
+    var gross = g.gross, year = state.profile.year, range = employmentRange(state.profile);
+    // 급여 입력이 없으면 4대보험 공제를 월할 추정치로 채운다(설계값이 과대해지지 않게)
+    var payroll = state.payroll || {}, hasPay = Object.keys(payroll).some(function (k) { return k.slice(0, 4) === String(year); });
+    if (!hasPay) {
+      var months = monthsInRange(range), mg = fl(gross / months.length), mn = fl(num(state.profile.expectedNonTaxable) / months.length);
+      payroll = {}; months.forEach(function (ym) { payroll[ym] = { yearMonth: ym, gross: mg, nonTaxable: mn, status: 'FORECAST', premiums: mergePremiums(null, estimatePremiums(ym, mg, mn, rules)) }; });
+    }
+    var sc0 = state.profile.selfConditions || {};
+    var homeless = scenario.homelessHead === undefined ? (sc0.isHomeless === true && sc0.isHouseholdHead === true) : !!scenario.homelessHead;
+    var baseProfile = Object.assign({}, state.profile, {
+      mortgageCapKey: scenario.mortgageCapKey || state.profile.mortgageCapKey || rules.housing.mortgageInterest.capOptions[0].key,
+      selfConditions: Object.assign({}, sc0, { isHomeless: homeless, isHouseholdHead: homeless || sc0.isHouseholdHead, marriageRegisteredYear: null, smeEmployment: null })
+    });
+    var smeCat = scenario.smeCategory || 'YOUTH';
+    function build(parts) {
+      var prof = Object.assign({}, baseProfile, { selfConditions: Object.assign({}, baseProfile.selfConditions) });
+      if (parts.marriage) prof.selfConditions.marriageRegisteredYear = year;
+      if (parts.sme) prof.selfConditions.smeEmployment = { category: smeCat, employedAt: scenario.smeEmployedAt || (year + '-01-01') };
+      var st = Object.assign({}, state, { profile: prof, family: parts.family, deductions: parts.entries, expenses: [], recurring: [], payroll: payroll });
+      return calc(st, rules, { extraExpenses: parts.extras });
+    }
+    function clone(p) { return { family: p.family.slice(), entries: p.entries.slice(), extras: p.extras.slice(), marriage: p.marriage, sme: p.sme }; }
+    function add(p, part) {
+      var q = clone(p);
+      if (part.family) q.family = q.family.concat(part.family);
+      if (part.entries) q.entries = q.entries.concat(part.entries);
+      if (part.extras) q.extras = q.extras.concat(part.extras);
+      if (part.profile && part.profile.marriageRegisteredYear) q.marriage = true;
+      if (part.sme) q.sme = true;
+      return q;
+    }
+    var cur = { family: [], entries: [], extras: [], marriage: false, sme: false };
+    var base = build(cur), prevTax = base.totalTax, prevR = base;
+    // 1) 부양가족: 실제 가족(제외 선택 가능) + 가상 추가
+    var famOn = scenario.family || {};
+    var members = (state.family || []).map(function (m) { return { m: m, virtual: false, on: famOn[m.id] !== false }; })
+      .concat((scenario.extraFamily || []).map(function (m) { return { m: Object.assign({ incomeUnderLimit: true }, m), virtual: true, on: m.on !== false }; }));
+    var famRows = members.map(function (x) {
+      var row = { key: 'FAM-' + x.m.id, id: x.m.id, group: 'FAMILY', label: (x.m.alias || '') , relation: x.m.relation, birthYear: x.m.birthYear, virtual: x.virtual, on: x.on, type: '소득공제', member: x.m };
+      var flag = deriveFamilyFlags(x.m, baseProfile, rules);
+      row.flag = flag;
+      if (x.on) {
+        var nxt = add(cur, { family: [x.m] }), r = build(nxt);
+        row.deduction = Math.max(0, designMetric(r, 'personal') - designMetric(prevR, 'personal'));
+        row.creditNote = (r.child.credit + r.child.birthAdoption) - (prevR.child.credit + prevR.child.birthAdoption);
+        row.saving = Math.max(0, prevTax - r.totalTax); cur = nxt; prevTax = r.totalTax; prevR = r;
+      }
+      return row;
+    });
+    // 2) 항목
+    var catalog = designCatalog(gross, rules, year), sel = scenario.items || {};
+    var rows = catalog.map(function (it) {
+      var s = sel[it.key] || {};
+      var row = Object.assign({}, it, { on: s.on === undefined ? it.on : !!s.on, amount: s.amount === undefined || s.amount === null ? it.amount : num(s.amount) });
+      if (row.na) row.on = false;
+      if (row.needsHomeless && !homeless) row.blockedReason = '무주택 세대주 조건 미선택';
+      return row;
+    });
+    rows.forEach(function (row) {
+      if (!row.on) return;
+      var nxt = add(cur, designItemParts(row, row.amount, year)), r = build(nxt);
+      row.deduction = Math.max(0, designMetric(r, row.metric) - designMetric(prevR, row.metric));
+      row.saving = Math.max(0, prevTax - r.totalTax); cur = nxt; prevTax = r.totalTax; prevR = r;
+    });
+    var finalR = prevR;
+    // 3) 선택 안 한 항목: 최종 상태에 하나만 더했을 때 추가로 줄어드는 세금
+    rows.concat(famRows).forEach(function (row) {
+      if (row.on || row.na) return;
+      var part = row.group === 'FAMILY' ? { family: [row.member] } : designItemParts(row, row.amount, year);
+      var r = build(add(cur, part));
+      row.potential = Math.max(0, finalR.totalTax - r.totalTax);
+      row.potentialDeduction = Math.max(0, designMetric(r, row.group === 'FAMILY' ? 'personal' : row.metric) - designMetric(finalR, row.group === 'FAMILY' ? 'personal' : row.metric));
+    });
+    var groups = DESIGN_GROUPS.map(function (gr) {
+      var items = gr.key === 'FAMILY' ? famRows : rows.filter(function (r) { return r.group === gr.key; });
+      var on = items.filter(function (r) { return r.on; });
+      return { key: gr.key, label: gr.label, type: gr.type, items: items, saving: on.reduce(function (s, r) { return s + (r.saving || 0); }, 0), use: on.reduce(function (s, r) { return s + (r.toggleOnly || r.group === 'FAMILY' ? 0 : num(r.amount)); }, 0) };
+    });
+    var all = rows.concat(famRows).filter(function (r) { return r.on; });
+    return {
+      available: true, gross: gross, year: year, homelessHead: homeless, estimatedPayroll: !hasPay,
+      baseline: base, final: finalR, baselineTax: base.totalTax, finalTax: finalR.totalTax,
+      totalSaving: Math.max(0, base.totalTax - finalR.totalTax), totalUse: groups.reduce(function (s, gr) { return s + gr.use; }, 0),
+      selectedCount: all.length, groups: groups, taxExhausted: finalR.determinedTax === 0,
+      mortgageCapKey: baseProfile.mortgageCapKey, smeCategory: smeCat
+    };
+  }
   function pctText(x) { return (Math.round(x * 1000) / 10) + '%'; }
   function won0(n) { return n >= 10000 && n % 10000 === 0 ? (n / 10000).toLocaleString('ko-KR') + '만원' : Math.round(n).toLocaleString('ko-KR') + '원'; }
 
@@ -774,6 +962,6 @@
     estimatePremiums: estimatePremiums, mergePremiums: mergePremiums, grossFromState: grossFromState, employmentRange: employmentRange, monthsInRange: monthsInRange,
     earnedIncomeDeduction: earnedIncomeDeduction, calculatedTax: calculatedTax, earnedIncomeTaxCredit: earnedIncomeTaxCredit,
     medicalCredit: medicalCredit, educationCredit: educationCredit, donationCredits: donationCredits, pensionCredit: pensionCredit, rentCredit: rentCredit,
-    collectDeductionInputs: collectDeductionInputs, buildOptimalPlan: buildOptimalPlan, buildPlanSummary: buildPlanSummary, mkExtra: mkExtra, classifyExpense: classifyExpense
+    collectDeductionInputs: collectDeductionInputs, buildOptimalPlan: buildOptimalPlan, buildPlanSummary: buildPlanSummary, buildTaxDesign: buildTaxDesign, DESIGN_GROUPS: DESIGN_GROUPS, mkExtra: mkExtra, classifyExpense: classifyExpense
   };
 });

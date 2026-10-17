@@ -47,6 +47,7 @@
     if (!st.merchantRules) st.merchantRules = {};
     if (!st.importedFiles) st.importedFiles = {};
     if (!st.importMappings) st.importMappings = {};
+    if (!st.scenario) st.scenario = {};
     if (!st.budget) st.budget = { remainingBudget: 0, categoryAvailability: {}, methodAvailability: {} };
     if (!st.profile.selfConditions) st.profile.selfConditions = {};
     return st;
@@ -58,6 +59,7 @@
     var rp = rules();
     var badges = badge(state.profile.year + '년 귀속', 'navy') + (rp ? badge('규칙팩 ' + rp.version + ' · ' + L.level[rp.verificationLevel], rp.verificationLevel === 'CASE_VERIFIED' ? 'green' : 'amber') : badge('규칙팩 없음(미지원)', 'red')) + badge('기준월 ' + state.profile.referenceMonth.slice(5) + '월') + (extraBadges || '');
     var cur = (location.hash || '#/plan').split(/[?/]/).slice(0, 2).join('/');
+    if (cur === '#/maximize') cur = '#/plan';
     var nav = hideNav ? '' : '<nav class="bottom" aria-label="주 메뉴">' + NAV.map(function (n) { return '<a href="' + n[0] + '" class="' + (cur === n[0] ? 'on' : '') + '"><span class="ico" aria-hidden="true">' + n[2] + '</span>' + n[1] + '</a>'; }).join('') + '</nav>';
     app.innerHTML = '<header class="top"><div class="row-between"><h1>' + esc(title) + '</h1>' + (hideNav ? '<a class="btn small" href="#/settings">← 뒤로</a>' : '<a class="btn small" href="#/settings" aria-label="설정">설정</a>') + '</div><div class="badges">' + badges + '</div></header><main>' + body + '</main>' + nav;
   }
@@ -95,8 +97,8 @@
       '<div class="tbl-wrap sum-wide"><table class="sum-table"><thead><tr><th>항목</th><th>요율</th><th class="num">최대 사용·납입액<br><span class="faint">(지금부터)</span></th><th class="num">공제금액</th><th class="num">세제혜택<br><span class="faint">(소득세+지방세)</span></th></tr></thead><tbody>' + sumRows + '</tbody>' +
       '<tfoot><tr><td colspan="2"><b>합계</b><div class="faint">조건부·대상 아님 제외</div></td><td class="num"><b>' + won(t.maxUse) + '</b></td><td class="num">소득 ' + won(t.incomeDeduction) + '<br>세액 ' + won(t.taxCredit) + '</td><td class="num"><b>' + won(t.taxSaving) + '</b></td></tr></tfoot></table></div>' +
       '<div class="grid2" style="margin-top:8px"><div><div class="muted">카드 등 사용 합계(한도 도달점)</div><b>' + won(plan.saturation) + '</b><div class="faint">이번에 더 쓸 금액 ' + won(t.cardMaxUse) + ' · 넘는 카드 사용은 공제 0</div></div><div><div class="muted">예상 세금(소득세+지방세)</div><b>' + won(sum.baselineTax) + ' → ' + won(sum.finalTax) + '</b><div class="faint">위 항목을 모두 채웠을 때</div></div></div>' +
-      '<div class="faint">의료비는 총급여 3%(' + won(plan.medical.threshold) + ')를 넘는 금액부터 ' + rate(plan.medical.rate) + ' 세액공제라 표에 넣지 않았습니다(아래 세부 참고). 연금계좌·청약은 쓰는 돈이 아니라 저축(납입)입니다. 세제혜택은 항목을 차례로 더하며 세금을 다시 계산한 값이라 결정세액 한도가 반영됩니다.</div></section>';
-    var body = summary + '<h2 class="section-title">세부 내용</h2><section class="card dark"><h2>' + (plan.hasInputs ? '현재 입력값 포함 · 추정' : '다른 공제 미입력 기준 · 추정') + '</h2><div class="kv"><span>총급여(비과세 제외)</span><b>' + won(plan.gross) + '</b></div><p class="muted" style="margin:0">지출을 늘리라는 뜻이 아닙니다. <b style="color:#fff">어차피 쓸 돈의 결제수단과 순서</b>를 바꾸는 것만으로 공제가 달라집니다. 아래 금액·구간은 총급여에 따라 자동 적용됩니다.</p></section>' +
+      '<div class="faint">의료비는 총급여 3%(' + won(plan.medical.threshold) + ')를 넘는 금액부터 ' + rate(plan.medical.rate) + ' 세액공제라 표에 넣지 않았습니다(아래 세부 참고). 연금계좌·청약은 쓰는 돈이 아니라 저축(납입)입니다. 세제혜택은 항목을 차례로 더하며 세금을 다시 계산한 값이라 결정세액 한도가 반영됩니다.</div><div class="btns"><a class="btn primary" href="#/maximize">부양가족·의료비·교육비·주거까지 전체 절세 설계 ›</a></div></section>';
+    var body = planTabs('plan') + summary + '<h2 class="section-title">세부 내용</h2><section class="card dark"><h2>' + (plan.hasInputs ? '현재 입력값 포함 · 추정' : '다른 공제 미입력 기준 · 추정') + '</h2><div class="kv"><span>총급여(비과세 제외)</span><b>' + won(plan.gross) + '</b></div><p class="muted" style="margin:0">지출을 늘리라는 뜻이 아닙니다. <b style="color:#fff">어차피 쓸 돈의 결제수단과 순서</b>를 바꾸는 것만으로 공제가 달라집니다. 아래 금액·구간은 총급여에 따라 자동 적용됩니다.</p></section>' +
       '<section class="card"><div class="row-between"><h3>카드 사용 순서 플랜</h3>' + basisLink('card') + '</div>' + stages + '<div class="kv"><span>세 단계 모두 채우면 카드 소득공제</span><b>' + won(plan.totalDeduction) + '</b></div><div class="kv"><span>예상 절세 합계</span><b>' + won(plan.totalTaxSaving) + '</b></div><div class="faint">이 순서로 쓸 때 한도가 모두 채워지는 카드 사용 합계는 약 ' + won(plan.saturation) + '입니다(결제수단 구성이 달라지면 지점도 달라짐). 그 뒤 추가 사용은 공제 0. 소득공제는 종합한도 ' + won(rp.overallDeductionCap.amount) + ' 안에서만 적용.</div></section>' +
       '<section class="card"><div class="row-between"><h3>의료비</h3>' + basisLink('medical') + '</div><div class="kv"><span>혜택 시작(총급여 3%)</span><b>' + won(plan.medical.threshold) + '</b></div>' + bar(plan.medical.progress) + '<div class="kv"><span>지금까지 입력한 의료비</span><b>' + won(plan.medical.current) + '</b></div><div class="muted">초과분의 ' + rate(plan.medical.rate) + ' 세액공제. 일반 부양가족은 공제대상 ' + won(plan.medical.generalCap) + ' 한도, 본인·65세 이상·6세 이하·장애인은 한도 없음. 실손보험금 보전분 제외.</div></section>' +
       '<section class="card"><div class="row-between"><h3>기부금</h3>' + basisLink('donation') + '</div><div class="kv"><span>고향사랑기부 ' + won(plan.donation.hometownLowCap) + '까지</span><b>100/110 전액 공제</b></div><div class="kv"><span>고향사랑 초과분</span><b>' + rate(plan.donation.hometownRate) + '</b></div><div class="kv"><span>특례·일반 ' + won(plan.donation.generalLowUpTo) + ' 이하</span><b>' + rate(plan.donation.generalLowRate) + '</b></div><div class="kv"><span>특례·일반 초과분</span><b>' + rate(plan.donation.generalHighRate) + '</b></div><div class="muted">' + esc(plan.donation.capNote) + '. 세액공제는 결정세액(' + won(a.determinedTax) + ') 범위에서만 효과가 있습니다.</div></section>' +
@@ -113,6 +115,57 @@
       '<div class="btns"><a class="btn primary" href="#/home">홈으로</a><a class="btn" href="#/settings">총급여·가족 수정</a><a class="btn" href="#/input">지출 입력</a></div>';
     shell('최적 사용 플랜', body);
   }
+
+  // ---------- 전체 절세 설계 ----------
+  // 실제 입력과 별개인 시뮬레이션. 선택·금액은 state.scenario 에 저장해 다시 열어도 유지된다.
+  function planTabs(on) { return '<div class="tabs"><a class="btn' + (on === 'plan' ? ' on' : '') + '" href="#/plan">카드 사용 플랜</a><a class="btn' + (on === 'max' ? ' on' : '') + '" href="#/maximize">전체 절세 설계</a></div>'; }
+  function viewMaximize() {
+    var rp = rules();
+    if (!rp) return shell('전체 절세 설계', '<div class="err">' + state.profile.year + '년 규칙팩이 없습니다.</div>');
+    var d = E.buildTaxDesign(state, rp, state.scenario);
+    if (!d.available) return shell('전체 절세 설계', planTabs('max') + '<section class="card"><h3>총급여를 먼저 입력하세요</h3><p class="muted">연봉을 넣으면 받을 수 있는 세제혜택을 항목별로 모두 계산합니다.</p><a class="btn primary" href="#/plan">연봉 입력하러 가기</a></section>');
+    var sc = state.scenario;
+    var top = '<section class="card dark"><h2>세제혜택 최대 설계 · 추정</h2>' +
+      '<div class="grid2"><div><div class="muted">아무 공제도 안 했을 때 세금</div><b style="font-size:18px">' + won(d.baselineTax) + '</b></div><div><div class="muted">이 설계대로 했을 때 세금</div><b style="font-size:18px">' + won(d.finalTax) + '</b></div></div>' +
+      '<div class="kv"><span>총 세제혜택(소득세+지방세)</span><b style="font-size:20px">' + won(d.totalSaving) + '</b></div>' +
+      '<div class="kv"><span>선택 항목 ' + d.selectedCount + '개 · 사용·납입 합계</span><b>' + won(d.totalUse) + '</b></div>' +
+      '<p class="muted" style="margin:6px 0 0">체크한 항목을 위에서부터 차례로 더하며 세금을 다시 계산했습니다. 체크 안 한 항목은 “선택 시 +금액”으로 추가 효과를 보여줍니다. 실제 입력(지출·공제)과 별개인 설계이며 확정 환급액이 아닙니다.</p></section>';
+    if (d.taxExhausted) top += '<div class="warn"><b>세금이 0원이 되었습니다.</b><span>더 선택해도 줄일 세금이 없습니다. 혜택이 0원으로 나온 항목은 빼도 되고, 연금저축처럼 큰 금액이 드는 항목의 금액을 줄여도 결과가 같은지 확인해 보세요.</span></div>';
+    if (d.estimatedPayroll) top += '<div class="faint">급여 입력이 없어 4대보험 공제는 연봉을 월할한 추정치로 넣었습니다.</div>';
+    var cond = '<section class="card"><h3>조건(가정)</h3><div class="form">' +
+      '<label class="row"><input type="checkbox" data-action="design-cond" name="homelessHead"' + (d.homelessHead ? ' checked' : '') + '>무주택 세대주(주택청약·월세·전세대출 공제 요건)</label>' +
+      '<label>중소기업 취업자 감면 구분<select data-action="design-cond" name="smeCategory">' + opts(L.sme, d.smeCategory) + '</select></label>' +
+      '<label>주택담보대출 조건(이자 공제 한도)<select data-action="design-cond" name="mortgageCapKey">' + rp.housing.mortgageInterest.capOptions.map(function (o) { return '<option value="' + o.key + '"' + (o.key === d.mortgageCapKey ? ' selected' : '') + '>' + esc(o.label) + ' ' + won(o.cap) + '</option>'; }).join('') + '</select></label>' +
+      '</div><div class="btns"><button class="btn small" data-action="design-reset">설계 초기화</button></div></section>';
+    function saveCell(r) {
+      if (r.na) return '<span class="faint">대상 아님</span>';
+      if (r.on) return '<b class="save">' + won(r.saving || 0) + '</b>' + (r.deduction > 0 && !r.saving ? '<div class="faint">세금 소진</div>' : '');
+      return '<span class="pot">선택 시 +' + won(r.potential || 0) + '</span>';
+    }
+    var groups = d.groups.map(function (g) {
+      var head = '<div class="row-between dgroup-head"><h3>' + esc(g.label) + ' <span class="faint">' + esc(g.type) + '</span></h3><b class="save">' + won(g.saving) + '</b></div>';
+      var items;
+      if (g.key === 'FAMILY') {
+        items = '<div class="ditem self"><span></span><div class="dmain"><b>본인</b><div class="faint">기본공제 ' + won(rp.personal.basic) + '(항상 포함, 기준 세금에 반영)</div></div><div class="dsave"></div><div class="dnums"></div></div>' +
+          g.items.map(function (r) {
+            var who = (r.alias || r.label || L.rel[r.relation]) + ' · ' + L.rel[r.relation] + (r.birthYear ? ' · ' + r.birthYear + '년생' : '');
+            var why = r.flag ? (r.flag.isBasicDeductionTarget ? '기본공제 대상' + (r.flag.isSenior ? ' · 경로우대' : '') + (r.flag.isDisabled ? ' · 장애인' : '') + (r.flag.isChildTaxCreditTarget ? ' · 자녀세액공제' : '') : r.flag.reasonBasic) : '';
+            return '<div class="ditem' + (r.on ? '' : ' off') + '"><label class="dchk"><input type="checkbox" data-action="design-fam" data-id="' + esc(r.id) + '"' + (r.virtual ? ' data-virtual="1"' : '') + (r.on ? ' checked' : '') + '></label><div class="dmain"><b>' + esc(who) + '</b> ' + (r.virtual ? badge('가상', 'gray') + ' <button class="btn link" data-action="design-fam-del" data-id="' + esc(r.id) + '">삭제</button>' : badge('내 가족', 'navy')) + '<div class="faint">' + esc(why) + (r.on && r.creditNote ? ' · 자녀·출산 세액공제 +' + won(r.creditNote) : '') + '</div></div><div class="dsave">' + saveCell(r) + '</div><div class="dnums"><div><span>공제금액</span>' + won(r.on ? r.deduction : r.potentialDeduction) + '</div></div></div>';
+          }).join('') +
+          '<form data-form="design-family" class="form dadd"><b class="full">부양가족 추가(가상)</b><label>관계<select name="relation">' + opts(L.rel, 'LINEAL_ASCENDANT') + '</select></label><label>별칭<input name="alias" placeholder="예: 어머니"></label><label>출생연도<input name="birthYear" inputmode="numeric" placeholder="예: 1955" required></label><label class="row"><input type="checkbox" name="disability">장애인</label><label class="row"><input type="checkbox" name="born">올해 출생·입양</label><label>자녀 순번(출생·입양 시)<select name="childOrder"><option value="">-</option><option value="1">첫째</option><option value="2">둘째</option><option value="3">셋째 이상</option></select></label><div class="faint full">연소득 100만원 이하(근로소득만 있으면 총급여 500만원 이하)라고 가정합니다. 실제 가족은 설정에서 입력하세요.</div><div class="full btns"><button class="btn" type="submit">가족 추가</button></div></form>';
+      } else {
+        items = g.items.map(function (r) {
+          var amt = r.toggleOnly ? '<span class="faint">' + esc(r.cap) + '</span>' : '<input class="damt" inputmode="numeric" data-action="design-amount" data-key="' + r.key + '" value="' + Math.round(r.amount || 0).toLocaleString('ko-KR') + '"' + (r.na ? ' disabled' : '') + '>' + (r.example && !r.max ? '<div class="faint">예시 금액</div>' : '');
+          return '<div class="ditem' + (r.on ? '' : ' off') + (r.na ? ' na' : '') + '"><label class="dchk"><input type="checkbox" data-action="design-toggle" data-key="' + r.key + '"' + (r.on ? ' checked' : '') + (r.na ? ' disabled' : '') + '></label><div class="dmain"><b>' + esc(r.label) + '</b><div class="faint">' + esc(r.sub) + (r.blockedReason && r.on ? ' · <span class="warn-ink">' + esc(r.blockedReason) + '</span>' : '') + '</div></div><div class="dsave">' + saveCell(r) + '</div>' +
+            '<div class="dnums"><div><span>요율</span>' + esc(r.rate) + '</div><div><span>한도</span>' + esc(r.cap) + '</div><div><span>' + (r.toggleOnly ? '금액' : '사용·납입액') + '</span>' + amt + '</div><div><span>공제금액</span>' + won(r.on ? r.deduction : r.potentialDeduction) + '</div></div></div>';
+        }).join('');
+      }
+      return '<section class="card dgroup">' + head + items + '</section>';
+    }).join('');
+    shell('전체 절세 설계', planTabs('max') + top + cond + groups + '<div class="faint">규칙팩 ' + rp.version + ' · ' + L.level[rp.verificationLevel] + '. 항목별 요건(무주택, 소득요건, 장애인 등)을 충족해야 실제 공제됩니다. 세부 기준은 ' + basisLink() + '</div>');
+  }
+  function saveScenario() { var y = window.scrollY; return persist().then(function () { render(); window.scrollTo(0, y); }); }
+  function scenarioItem(key) { state.scenario.items = state.scenario.items || {}; return (state.scenario.items[key] = state.scenario.items[key] || {}); }
 
   // ---------- S01 홈 ----------
   function viewHome() {
@@ -539,6 +592,7 @@
         case 'detail': return viewDetail();
         case 'settings': return viewSettings();
         case 'basis': return viewBasis();
+        case 'maximize': return viewMaximize();
         default: return viewPlan();
       }
     } catch (err) {
@@ -563,6 +617,11 @@
       state.cards.push({ id: uid(), alias: d.alias, last4: l4, paymentMethod: d.paymentMethod, spenderId: d.spenderId || 'self' });
       ui.importQueue.forEach(buildPreview);
       persist().then(function (ok) { if (ok) toast('카드 등록됨: ' + d.alias + ' (' + l4 + ')'); render(); }); return;
+    }
+    if (kind === 'design-family') {
+      var by = num(d.birthYear); if (!by || by < 1900 || by > state.profile.year) return toast('출생연도를 확인하세요', true);
+      state.scenario.extraFamily = (state.scenario.extraFamily || []).concat([{ id: uid(), alias: d.alias || L.rel[d.relation], relation: d.relation, birthYear: by, disability: checked(form, 'disability'), incomeUnderLimit: true, bornOrAdoptedThisYear: checked(form, 'born'), childOrder: num(d.childOrder), on: true }]);
+      saveScenario().then(function () { toast('부양가족 추가(가상): ' + (d.alias || L.rel[d.relation])); }); return;
     }
     if (kind === 'import-map') {
       var en = ui.importQueue[Number(d.qi)]; if (!en) return;
@@ -654,6 +713,15 @@
     if (pf) { saveProfile(pf, el.name === 'year'); return; }
     if (act === 'filter-month') { ui.expenseMonth = el.value; render(); }
     if (act === 'ded-category') { ui.dedCategory = el.value; render(); }
+    if (act === 'design-toggle') { scenarioItem(el.getAttribute('data-key')).on = el.checked; saveScenario(); return; }
+    if (act === 'design-amount') { var v = num(el.value); if (v === null || v < 0) { toast('금액을 숫자로 입력하세요', true); return; } scenarioItem(el.getAttribute('data-key')).amount = v; saveScenario(); return; }
+    if (act === 'design-cond') { state.scenario[el.name] = el.type === 'checkbox' ? el.checked : el.value; saveScenario(); return; }
+    if (act === 'design-fam') {
+      var fid = el.getAttribute('data-id');
+      if (el.getAttribute('data-virtual')) { (state.scenario.extraFamily || []).forEach(function (m) { if (m.id === fid) m.on = el.checked; }); }
+      else { state.scenario.family = state.scenario.family || {}; state.scenario.family[fid] = el.checked; }
+      saveScenario(); return;
+    }
     if (act === 'import-card') { var en = ui.importQueue[Number(el.getAttribute('data-qi'))]; if (en) { en.cardId = el.value; buildPreview(en); render(); } }
     if (act === 'import-file') {
       var files = Array.prototype.slice.call(el.files || []);
@@ -694,6 +762,8 @@
       case 'cancel-premiums': ui.editingPremiums = null; render(); break;
       case 'reset-premiums': { var p = state.payroll[ym]; if (p) { p.premiums = E.mergePremiums(null, E.estimatePremiums(ym, p.gross, p.nonTaxable, rp)); persist().then(render); } break; }
       case 'del-card': state.cards = state.cards.filter(function (x) { return x.id !== id; }); persist().then(render); break;
+      case 'design-reset': state.scenario = {}; saveScenario().then(function () { toast('설계를 초기화했습니다'); }); break;
+      case 'design-fam-del': state.scenario.extraFamily = (state.scenario.extraFamily || []).filter(function (m) { return m.id !== id; }); saveScenario(); break;
       case 'connect-dir': connectDir(); break;
       case 'regrant-dir': regrantDir(); break;
       case 'scan-dir': scanDir().then(render); break;
