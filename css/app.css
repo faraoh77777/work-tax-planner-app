@@ -79,7 +79,7 @@ td.num,th.num{text-align:right;white-space:nowrap}
 .warn{background:var(--amber-bg);color:var(--amber-ink);border-radius:12px;padding:12px 14px;font-size:13px;display:flex;flex-direction:column;gap:4px}
 .err{background:var(--red-bg);color:var(--red);border-radius:10px;padding:10px 12px;font-size:13px}
 .ok{background:var(--green-bg);color:var(--green);border-radius:10px;padding:10px 12px;font-size:13px}
-nav.bottom{position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(6,minmax(0,1fr));padding:6px 4px 12px;z-index:5}
+nav.bottom{position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(3,minmax(0,1fr));padding:6px 4px 12px;z-index:5}
 nav.bottom a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:48px;font-size:11px;color:var(--muted)}
 nav.bottom a.on{color:var(--blue);font-weight:700}
 nav.bottom a .ico{font-size:18px;line-height:1}
@@ -110,3 +110,45 @@ details summary{cursor:pointer;font-weight:600;font-size:13px}
 .dctl select{max-width:100%;padding:4px 6px;border:1px solid #C9D3E0;border-radius:6px;font-size:13px}
 .dgroup-ctl{padding:8px 10px;margin-top:6px;background:var(--amber-bg);border-radius:8px}
 .dgroup-ctl .dctl{margin-top:0}
+/* ---------- 초보자용 단순 화면 ---------- */
+.year-chip{font-size:12px;color:var(--faint)}
+header.top .gear{font-size:13px}
+nav.bottom a{font-size:13px}
+nav.bottom a .ico{font-size:20px}
+.hero{text-align:center;padding:20px 16px}
+.hero-num{font-size:30px;font-weight:800;letter-spacing:-.5px;margin:6px 0;color:var(--ink)}
+.hero-num.pos{color:var(--green)}
+.hero-num.neg{color:var(--red)}
+.hero .btn{margin-top:10px}
+.hero-start h2{margin:0 0 6px;font-size:20px}
+.stepn{display:inline-flex;width:24px;height:24px;border-radius:12px;background:var(--navy);color:#fff;font-size:13px;align-items:center;justify-content:center;margin-right:8px}
+.choices{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
+.choice{display:flex;align-items:center;gap:8px;padding:10px;border:1px solid var(--line);border-radius:10px;cursor:pointer}
+.choice small{display:block;color:var(--faint);font-size:11px}
+.choice:has(input:checked){border-color:var(--blue);background:var(--blue-bg)}
+.btn.big{min-height:52px;font-size:16px;flex:1}
+.tip{border-bottom:1px solid var(--line)}
+.tip summary{list-style:none;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 0;cursor:pointer}
+.tip summary::-webkit-details-marker{display:none}
+.tip-main{display:flex;flex-direction:column;gap:2px;min-width:0}
+.tip-main span{font-size:13px;color:var(--muted)}
+.tip-amt{color:var(--green);font-size:17px;white-space:nowrap}
+.tip-body{padding:0 0 12px;font-size:13px;color:var(--muted)}
+.tip-body p{margin:0 0 6px}
+.tip[open] summary .tip-amt::after{content:' ▲';font-size:10px;color:var(--faint)}
+.tip:not([open]) summary .tip-amt::after{content:' ▼';font-size:10px;color:var(--faint)}
+.all-save{margin:10px 0;padding:10px;border-radius:10px;background:var(--green-bg);text-align:center}
+.all-save b{color:var(--green);font-size:17px}
+details.q{display:inline-block;position:relative;vertical-align:middle}
+details.q summary{list-style:none;display:inline-flex;width:18px;height:18px;border-radius:9px;background:var(--blue-bg);color:var(--blue);font-size:12px;font-weight:700;align-items:center;justify-content:center;cursor:pointer}
+details.q summary::-webkit-details-marker{display:none}
+details.q span{position:absolute;z-index:6;left:-8px;top:24px;width:240px;padding:10px;border-radius:10px;background:var(--navy);color:#fff;font-size:12px;font-weight:400;line-height:1.5;box-shadow:0 4px 14px rgba(0,0,0,.2)}
+details.more>summary{cursor:pointer;color:var(--blue);font-size:14px;padding:4px 0}
+.more-links{display:flex;flex-direction:column;gap:10px;padding:8px 0}
+.more-links a{font-size:14px}
+.dcard .save{font-size:16px}
+.checks summary{cursor:pointer;color:var(--amber);font-weight:600}
+.tabs{scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.add-ded>summary{font-weight:700;color:var(--ink)}
+.form label>span{display:flex;align-items:center;gap:6px}
