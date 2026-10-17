@@ -966,7 +966,8 @@
       var s = sel[it.key] || {};
       var row = Object.assign({}, it, { on: s.on === undefined ? it.on : !!s.on, amount: s.amount === undefined || s.amount === null ? it.amount : num(s.amount) });
       if (row.na) row.on = false;
-      if (row.needsHomeless && !homeless) row.blockedReason = '무주택 세대주 조건 미선택';
+      // 무주택 세대주 조건을 고르지 않으면 체크를 빼고 잠근다(혜택 0인데 납입액만 합계에 들어가지 않게)
+      if (row.needsHomeless && !homeless) { row.on = false; row.locked = true; row.blockedReason = '조건(가정)에서 무주택 세대주를 선택하면 체크할 수 있습니다'; }
       return row;
     });
     rows.forEach(function (row) {
@@ -978,7 +979,7 @@
     var finalR = prevR;
     // 3) 선택 안 한 항목: 최종 상태에 하나만 더했을 때 추가로 줄어드는 세금
     rows.concat(famRows).forEach(function (row) {
-      if (row.on || row.na) return;
+      if (row.on || row.na || row.locked) return;
       var part = row.group === 'FAMILY' ? { family: [row.member] } : designItemParts(row, row.amount, year);
       var r = build(add(cur, part));
       row.potential = Math.max(0, finalR.totalTax - r.totalTax);

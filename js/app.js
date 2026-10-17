@@ -139,6 +139,7 @@
       '</div><div class="btns"><button class="btn small" data-action="design-reset">설계 초기화</button></div></section>';
     function saveCell(r) {
       if (r.na) return '<span class="faint">대상 아님</span>';
+      if (r.locked) return '<span class="faint">조건 필요</span>';
       if (r.on) return '<b class="save">' + won(r.saving || 0) + '</b>' + (r.deduction > 0 && !r.saving ? '<div class="faint">세금 소진</div>' : '');
       return '<span class="pot">선택 시 +' + won(r.potential || 0) + '</span>';
     }
@@ -155,8 +156,8 @@
           '<form data-form="design-family" class="form dadd"><b class="full">부양가족 추가(가상)</b><label>관계<select name="relation">' + opts(L.rel, 'LINEAL_ASCENDANT') + '</select></label><label>별칭<input name="alias" placeholder="예: 어머니"></label><label>출생연도<input name="birthYear" inputmode="numeric" placeholder="예: 1955" required></label><label class="row"><input type="checkbox" name="disability">장애인</label><label class="row"><input type="checkbox" name="born">올해 출생·입양</label><label>자녀 순번(출생·입양 시)<select name="childOrder"><option value="">-</option><option value="1">첫째</option><option value="2">둘째</option><option value="3">셋째 이상</option></select></label><div class="faint full">연소득 100만원 이하(근로소득만 있으면 총급여 500만원 이하)라고 가정합니다. 실제 가족은 설정에서 입력하세요.</div><div class="full btns"><button class="btn" type="submit">가족 추가</button></div></form>';
       } else {
         items = g.items.map(function (r) {
-          var amt = r.toggleOnly ? '<span class="faint">' + esc(r.cap) + '</span>' : '<input class="damt" inputmode="numeric" data-action="design-amount" data-key="' + r.key + '" value="' + Math.round(r.amount || 0).toLocaleString('ko-KR') + '"' + (r.na ? ' disabled' : '') + '>' + (r.example && !r.max ? '<div class="faint">예시 금액</div>' : '');
-          return '<div class="ditem' + (r.on ? '' : ' off') + (r.na ? ' na' : '') + '"><label class="dchk"><input type="checkbox" data-action="design-toggle" data-key="' + r.key + '"' + (r.on ? ' checked' : '') + (r.na ? ' disabled' : '') + '></label><div class="dmain"><b>' + esc(r.label) + '</b><div class="faint">' + esc(r.sub) + (r.blockedReason && r.on ? ' · <span class="warn-ink">' + esc(r.blockedReason) + '</span>' : '') + '</div></div><div class="dsave">' + saveCell(r) + '</div>' +
+          var amt = r.toggleOnly ? '<span class="faint">' + esc(r.cap) + '</span>' : '<input class="damt" inputmode="numeric" data-action="design-amount" data-key="' + r.key + '" value="' + Math.round(r.amount || 0).toLocaleString('ko-KR') + '"' + (r.na || r.locked ? ' disabled' : '') + '>' + (r.example && !r.max ? '<div class="faint">예시 금액</div>' : '');
+          return '<div class="ditem' + (r.on ? '' : ' off') + (r.na || r.locked ? ' na' : '') + '"><label class="dchk"><input type="checkbox" data-action="design-toggle" data-key="' + r.key + '"' + (r.on ? ' checked' : '') + (r.na || r.locked ? ' disabled' : '') + '></label><div class="dmain"><b>' + esc(r.label) + '</b><div class="faint">' + esc(r.sub) + (r.blockedReason ? ' · <span class="warn-ink">' + esc(r.blockedReason) + '</span>' : '') + '</div></div><div class="dsave">' + saveCell(r) + '</div>' +
             '<div class="dnums"><div><span>요율</span>' + esc(r.rate) + '</div><div><span>한도</span>' + esc(r.cap) + '</div><div><span>' + (r.toggleOnly ? '금액' : '사용·납입액') + '</span>' + amt + '</div><div><span>공제금액</span>' + won(r.on ? r.deduction : r.potentialDeduction) + '</div></div></div>';
         }).join('');
       }
