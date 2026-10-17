@@ -48,6 +48,8 @@
     if (!st.importedFiles) st.importedFiles = {};
     if (!st.importMappings) st.importMappings = {};
     if (!st.scenario) st.scenario = {};
+    // 예전 버전에서 설계 화면에만 저장된 담보대출 조건을 공용 설정으로 옮긴다
+    if (st.scenario.mortgageCapKey) { if (!st.profile.mortgageCapKey) st.profile.mortgageCapKey = st.scenario.mortgageCapKey; delete st.scenario.mortgageCapKey; }
     if (!st.budget) st.budget = { remainingBudget: 0, categoryAvailability: {}, methodAvailability: {} };
     if (!st.profile.selfConditions) st.profile.selfConditions = {};
     return st;
