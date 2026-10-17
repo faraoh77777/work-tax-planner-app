@@ -94,10 +94,30 @@
       return '<div class="sum-item' + (r.conditional || r.na ? ' dim' : '') + '"><div class="row-between"><div><b>' + esc(r.label) + '</b>' + tag + '</div><b class="save">' + won(r.taxSaving) + '</b></div><div class="faint">' + esc(r.rate) + ' ' + esc(r.type) + ' · ' + esc(r.sub) + (r.note ? ' · ' + esc(r.note) : '') + '</div>' +
         '<div class="sum-nums"><div><span>최대 사용·납입</span>' + (r.maxUse > 0 ? won(r.maxUse) : (r.na ? '—' : '없음(도달)')) + '</div><div><span>공제금액</span>' + won(r.deduction) + '</div><div><span>세제혜택</span>' + won(r.taxSaving) + '</div></div></div>';
     }).join('') + '<div class="sum-item total"><div class="row-between"><b>합계</b><b class="save">' + won(t.taxSaving) + '</b></div><div class="faint">조건부·대상 아님 제외</div><div class="sum-nums"><div><span>최대 사용·납입</span>' + won(t.maxUse) + '</div><div><span>소득공제</span>' + won(t.incomeDeduction) + '</div><div><span>세액공제</span>' + won(t.taxCredit) + '</div></div></div>';
+    // 이미 입력한 공제(담보대출 이자·보험·의료·교육·기부·월세·연금·부양가족): 현재 세금에 반영된 혜택. 각 항목만 뺐을 때 늘어나는 세금
+    var b0 = plan.baseline, sv = E.itemTaxSavings(state, rp);
+    var entered = [
+      { label: '부양가족 인적공제', input: state.family.length ? state.family.length + '명' : 0, ded: b0.personal.total - rp.personal.basic, save: sv.PERSONAL_FAMILY, kind: '소득공제' },
+      { label: '주택담보대출 이자', input: b0.housing.mortgageInterest, ded: b0.housing.mortgageDeduction, save: null, kind: '소득공제', note: b0.housing.mortgageNote },
+      { label: '주택청약·전세대출', input: b0.housing.subscription + b0.housing.rentLoan, ded: b0.housing.combined, save: null, kind: '소득공제' },
+      { label: '연금계좌(입력분)', input: b0.pension.saving + b0.pension.irp, ded: b0.pension.credit, save: sv.PENSION_ACCOUNT, kind: '세액공제' },
+      { label: '보장성보험', input: b0.insurance.base + b0.insurance.baseDisabled, ded: b0.insurance.credit, save: sv.INSURANCE, kind: '세액공제' },
+      { label: '의료비', input: b0.medical.total, ded: b0.medical.credit, save: sv.MEDICAL, kind: '세액공제', note: b0.medical.belowThreshold && b0.medical.total ? '총급여 3% 미달' : '' },
+      { label: '교육비', input: b0.education.base, ded: b0.education.credit, save: sv.EDUCATION, kind: '세액공제' },
+      { label: '기부금', input: b0.donation.amounts.political + b0.donation.amounts.hometown + b0.donation.amounts.special + b0.donation.amounts.general + b0.donation.amounts.religious, ded: b0.donation.political + b0.donation.hometown + b0.donation.specialGeneral, save: (sv.POLITICAL || 0) + (sv.HOMETOWN || 0) + (sv.DONATION_SPECIAL_GENERAL || 0), kind: '세액공제' },
+      { label: '월세', input: b0.rent.amount, ded: b0.rent.credit, save: sv.RENT, kind: '세액공제', note: b0.rent.amount && !b0.rent.eligible ? b0.rent.reasons.join(', ') : '' }
+    ].filter(function (x) { return x.input; });
+    // 주택자금은 담보대출·청약·전세대출을 한 번에 빼서 계산하므로 금액이 있는 쪽에 나눠 표시
+    var housingRows = entered.filter(function (x) { return x.label === '주택담보대출 이자' || x.label === '주택청약·전세대출'; });
+    housingRows.forEach(function (x, i) { x.save = i === 0 ? sv.HOUSING : 0; if (housingRows.length > 1 && i === 0) x.note = (x.note ? x.note + ' · ' : '') + '주택자금 합산 혜택'; });
+    var enteredHtml = entered.length ? '<h4 class="sub-title">이미 입력한 공제 <span class="faint">(현재 세금에 반영됨)</span></h4>' + entered.map(function (x) {
+      return '<div class="sum-item"><div class="row-between"><div><b>' + esc(x.label) + '</b> <span class="faint">' + esc(x.kind) + '</span></div><b class="save">' + won(x.save || 0) + '</b></div>' + (x.note ? '<div class="faint warn-ink">' + esc(x.note) + '</div>' : '') +
+        '<div class="sum-nums"><div><span>입력 금액</span>' + (typeof x.input === 'number' ? won(x.input) : esc(x.input)) + '</div><div><span>공제금액</span>' + won(x.ded) + '</div><div><span>세제혜택</span>' + won(x.save || 0) + '</div></div></div>';
+    }).join('') + '<div class="faint">각 항목만 뺐을 때 늘어나는 세금입니다(합계는 표준세액공제 전환 등으로 전체와 다를 수 있음). 입력·수정은 <a href="#/deductions">공제 관리</a>.</div>' : '';
     var summary = '<section class="card"><div class="row-between"><h3>한눈에 보기 — 항목별 최대 혜택</h3>' + basisLink() + '</div>' +
       '<div class="sum-list">' + sumList + '</div>' +
       '<div class="tbl-wrap sum-wide"><table class="sum-table"><thead><tr><th>항목</th><th>요율</th><th class="num">최대 사용·납입액<br><span class="faint">(지금부터)</span></th><th class="num">공제금액</th><th class="num">세제혜택<br><span class="faint">(소득세+지방세)</span></th></tr></thead><tbody>' + sumRows + '</tbody>' +
-      '<tfoot><tr><td colspan="2"><b>합계</b><div class="faint">조건부·대상 아님 제외</div></td><td class="num"><b>' + won(t.maxUse) + '</b></td><td class="num">소득 ' + won(t.incomeDeduction) + '<br>세액 ' + won(t.taxCredit) + '</td><td class="num"><b>' + won(t.taxSaving) + '</b></td></tr></tfoot></table></div>' +
+      '<tfoot><tr><td colspan="2"><b>합계</b><div class="faint">조건부·대상 아님 제외</div></td><td class="num"><b>' + won(t.maxUse) + '</b></td><td class="num">소득 ' + won(t.incomeDeduction) + '<br>세액 ' + won(t.taxCredit) + '</td><td class="num"><b>' + won(t.taxSaving) + '</b></td></tr></tfoot></table></div>' + enteredHtml +
       '<div class="grid2" style="margin-top:8px"><div><div class="muted">카드 등 사용 합계(한도 도달점)</div><b>' + won(plan.saturation) + '</b><div class="faint">이번에 더 쓸 금액 ' + won(t.cardMaxUse) + ' · 넘는 카드 사용은 공제 0</div></div><div><div class="muted">예상 세금(소득세+지방세)</div><b>' + won(sum.baselineTax) + ' → ' + won(sum.finalTax) + '</b><div class="faint">위 항목을 모두 채웠을 때</div></div></div>' +
       '<div class="faint">의료비는 총급여 3%(' + won(plan.medical.threshold) + ')를 넘는 금액부터 ' + rate(plan.medical.rate) + ' 세액공제라 표에 넣지 않았습니다(아래 세부 참고). 연금계좌·청약은 쓰는 돈이 아니라 저축(납입)입니다. 세제혜택은 항목을 차례로 더하며 세금을 다시 계산한 값이라 결정세액 한도가 반영됩니다.</div><div class="btns"><a class="btn primary" href="#/maximize">부양가족·의료비·교육비·주거까지 전체 절세 설계 ›</a></div></section>';
     var body = planTabs('plan') + summary + '<h2 class="section-title">세부 내용</h2><section class="card dark"><h2>' + (plan.hasInputs ? '현재 입력값 포함 · 추정' : '다른 공제 미입력 기준 · 추정') + '</h2><div class="kv"><span>총급여(비과세 제외)</span><b>' + won(plan.gross) + '</b></div><p class="muted" style="margin:0">지출을 늘리라는 뜻이 아닙니다. <b style="color:#fff">어차피 쓸 돈의 결제수단과 순서</b>를 바꾸는 것만으로 공제가 달라집니다. 아래 금액·구간은 총급여에 따라 자동 적용됩니다.</p></section>' +
