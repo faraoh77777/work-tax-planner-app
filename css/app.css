@@ -153,3 +153,5 @@ details.more>summary{cursor:pointer;color:var(--blue);font-size:14px;padding:4px
 .add-ded>summary{font-weight:700;color:var(--ink)}
 .form label>span{display:flex;align-items:center;gap:6px}
 .pay-table tfoot td{border-top:2px solid var(--ink);border-bottom:none;background:var(--blue-bg)}
+.basis-line{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;border-radius:10px;background:var(--blue-bg);font-size:15px;color:var(--ink)}
+.basis-line a{margin-left:4px}

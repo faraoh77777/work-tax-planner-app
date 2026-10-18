@@ -311,7 +311,10 @@
     if (!rp || E.grossFromState(state).gross === null) return viewStart();
     var t = E.buildTips(state, rp);
     var act = t.tips.filter(function (x) { return !x.conditional && !x.info; }), cond = t.tips.filter(function (x) { return x.conditional; }), info = t.tips.filter(function (x) { return x.info; });
-    var head = '<section class="card hero"><div class="muted">아래를 모두 하면</div><div class="hero-num pos">최대 ' + wonS(t.allSaving) + ' 더</div><div class="faint">세금 ' + wonS(t.baseTax) + ' → ' + wonS(t.afterTax) + ' · 줄을 누르면 방법이 나와요</div></section>';
+    // 어떤 연봉으로 계산했는지 맨 위에(연봉이 바뀌면 한도·요율이 달라짐)
+    var pf = state.profile, nt = pf.expectedNonTaxable || 0;
+    var basis = '<div class="basis-line"><div><div>' + (pf.salaryForecastMode === 'MONTHLY' ? '월별 급여 합계 <b>' + wonS(t.gross) + '</b> 기준' : '연봉 <b>' + wonS(pf.expectedGrossAnnual) + '</b> 기준') + '</div>' + (nt && pf.salaryForecastMode !== 'MONTHLY' ? '<div class="faint">비과세 ' + wonS(nt) + ' 빼고 ' + wonS(t.gross) + '으로 계산</div>' : '') + '</div><a class="btn small" href="#/settings">바꾸기</a></div>';
+    var head = basis + '<section class="card hero"><div class="muted">아래를 모두 하면</div><div class="hero-num pos">최대 ' + wonS(t.allSaving) + ' 더</div><div class="faint">세금 ' + wonS(t.baseTax) + ' → ' + wonS(t.afterTax) + ' · 줄을 누르면 방법이 나와요</div></section>';
     var sec = function (title, list, note) { return list.length ? '<section class="card"><h3>' + title + '</h3>' + (note ? '<p class="faint" style="margin:0 0 4px">' + note + '</p>' : '') + list.map(function (x) { return tipRow(x); }).join('') + '</section>' : ''; };
     var body = head + sec('지금 할 수 있는 것', act) + sec('해당되면 받을 수 있는 것', cond, '조건이 맞을 때만 받을 수 있어요. 금액은 예상이에요.') + sec('알아두면 좋은 것', info);
     shell('절세 방법', body + moreLinks([['#/maximize', '직접 조합해 보기(모든 항목·부양가족)'], ['#/plan', '카드 사용 순서 자세히'], ['#/design', '남은 생활비 나눠 쓰기'], ['#/basis', '계산 기준과 출처']]));
