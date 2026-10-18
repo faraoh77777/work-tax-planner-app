@@ -461,14 +461,15 @@
     var range = E.employmentRange(state.profile);
     var months = E.monthsInRange(range);
     var edit = ui.editingPayroll ? state.payroll[ui.editingPayroll] || { yearMonth: ui.editingPayroll } : null;
-    var form = '<section class="card"><h3>' + (edit ? edit.yearMonth + ' 급여 수정' : '월 급여 추가') + '</h3><form data-form="payroll" class="form">' +
-      '<label>월<select name="ym" ' + (edit ? 'disabled' : '') + '>' + months.map(function (m) { return '<option value="' + m + '"' + (edit && edit.yearMonth === m ? ' selected' : '') + (!edit && state.payroll[m] ? ' disabled' : '') + '>' + m + (state.payroll[m] ? ' (입력됨)' : '') + '</option>'; }).join('') + '</select>' + (edit ? '<input type="hidden" name="ym" value="' + edit.yearMonth + '">' : '') + '</label>' +
-      '<label>구분<select name="status"><option value="ACTUAL"' + (edit && edit.status === 'ACTUAL' ? ' selected' : '') + '>실제</option><option value="FORECAST"' + (edit && edit.status === 'FORECAST' ? ' selected' : '') + '>예상</option></select></label>' +
-      '<label>급여+상여(세전, 원)<input name="gross" inputmode="numeric" required value="' + (edit && edit.gross != null ? edit.gross : '') + '"></label>' +
-      '<label>비과세(원)<input name="nonTaxable" inputmode="numeric" value="' + (edit && edit.nonTaxable != null ? edit.nonTaxable : '0') + '"></label>' +
-      '<label>원천징수 소득세(원)<input name="incomeTaxWithheld" inputmode="numeric" value="' + (edit && edit.incomeTaxWithheld != null ? edit.incomeTaxWithheld : '') + '"></label>' +
-      '<label>원천징수 지방소득세(원)<input name="localTaxWithheld" inputmode="numeric" value="' + (edit && edit.localTaxWithheld != null ? edit.localTaxWithheld : '') + '"></label>' +
-      '<div class="full btns"><button class="btn primary" type="submit">저장(4대보험 자동 추정)</button>' + (edit ? '<button class="btn" type="button" data-action="cancel-payroll">취소</button>' : '') + '</div></form><div class="faint">4대보험 근로자 부담분은 저장 시 규칙팩 요율로 자동 채워지며(자동 배지) 급여명세서 값으로 항목별 수정할 수 있습니다. 급여명세서와 다를 수 있습니다(국민연금 기준소득월액은 전년 소득 기준).' + (rp && rp.premiums.confidence === 'UNVERIFIED' ? ' 현재 요율은 공단 고시 미대조(확인 필요).' : '') + '</div></section>';
+    // 급여표의 [입력]·[수정]을 눌렀을 때만 그 달 입력칸을 연다(입력 경로를 하나로)
+    var fmt = function (v) { return v != null && v !== '' ? Number(v).toLocaleString('ko-KR') : ''; };
+    var form = !edit ? '' : '<section class="card pay-edit"><h3>' + edit.yearMonth + ' 급여 ' + (state.payroll[edit.yearMonth] ? '수정' : '입력') + '</h3><form data-form="payroll" class="form"><input type="hidden" name="ym" value="' + edit.yearMonth + '">' +
+      '<label>급여+상여(세전, 원)<input name="gross" inputmode="numeric" required value="' + fmt(edit.gross) + '"></label>' +
+      '<label><span>비과세(원, 식대 등) ' + q('비과세') + '</span><input name="nonTaxable" inputmode="numeric" value="' + (edit.nonTaxable != null ? fmt(edit.nonTaxable) : fmt(Math.round((state.profile.expectedNonTaxable || 0) / 12))) + '"></label>' +
+      '<label><span>소득세(급여명세서) ' + q('원천징수') + '</span><input name="incomeTaxWithheld" inputmode="numeric" value="' + fmt(edit.incomeTaxWithheld) + '"></label>' +
+      '<label>지방소득세(급여명세서)<input name="localTaxWithheld" inputmode="numeric" value="' + fmt(edit.localTaxWithheld) + '"></label>' +
+      '<div class="full btns"><button class="btn primary" type="submit">저장</button><button class="btn" type="button" data-action="cancel-payroll">취소</button></div></form>' +
+      '<div class="faint">4대보험은 자동으로 계산돼요. 급여명세서와 다르면 [보험료]에서 고치세요.</div></section>';
     var rows = months.map(function (m) {
       var p = state.payroll[m];
       if (!p) return '<tr><td><b>' + m + '</b><div class="btns"><button class="btn small primary" data-action="edit-payroll" data-ym="' + m + '">입력</button></div></td><td colspan="6" class="muted">미입력</td></tr>';
@@ -486,7 +487,7 @@
     var T = { n: 0, gross: 0, nt: 0, inc: 0, loc: 0, np: 0, hi: 0, lt: 0, ei: 0 };
     months.forEach(function (m) { var p = state.payroll[m]; if (!p) return; var pr = p.premiums || {}; var pv = function (k) { return pr[k] && typeof pr[k].amount === 'number' ? pr[k].amount : 0; };
       T.n++; T.gross += p.gross || 0; T.nt += p.nonTaxable || 0; T.inc += p.incomeTaxWithheld || 0; T.loc += p.localTaxWithheld || 0; T.np += pv('nationalPension'); T.hi += pv('healthInsurance'); T.lt += pv('longTermCare'); T.ei += pv('employmentInsurance'); });
-    var sumBox = T.n ? '<section class="card pay-sum"><h3>' + T.n + '개월 합계</h3><div class="sum-nums"><div><span>급여(세전)</span>' + wonS(T.gross) + '</div><div><span>미리 낸 세금 ' + q('원천징수') + '</span>' + wonS(T.inc + T.loc) + '</div><div><span>4대보험</span>' + wonS(T.np + T.hi + T.lt + T.ei) + '</div></div><div class="faint">비과세 ' + wonS(T.nt) + ' · 소득세 ' + won(T.inc) + ' · 지방소득세 ' + won(T.loc) + '</div></section>' : '';
+    var sumBox = T.n ? '<section class="card pay-sum"><h3>' + T.n + '개월 합계</h3><div class="sum-nums"><div><span>급여(세전)</span>' + wonS(T.gross) + '</div><div><span>미리 낸 세금 ' + q('원천징수') + '</span>' + wonS(T.inc + T.loc) + '</div><div><span>4대보험</span>' + wonS(T.np + T.hi + T.lt + T.ei) + '</div></div><div class="faint">비과세 ' + wonS(T.nt) + ' · 소득세 ' + won(T.inc) + ' · 지방소득세 ' + won(T.loc) + '</div>' + (T.n < months.length ? '<div class="btns" style="margin-top:8px"><button class="btn small" data-action="payroll-fill">남은 ' + (months.length - T.n) + '개월을 마지막 달과 같은 금액으로 채우기</button></div>' : '') + '</section>' : '<section class="card"><p class="muted" style="margin:0">아래 표에서 달마다 <b>[입력]</b>을 눌러 급여명세서 금액을 넣어 주세요. 한 달만 넣으면 남은 달을 같은 금액으로 한 번에 채울 수 있어요.</p></section>';
     var foot = T.n ? '<tfoot><tr><td><b>합계</b><div class="faint">' + T.n + '개월</div></td><td class="num"><b>' + won(T.gross) + '</b><br><span class="faint">비과세 ' + won(T.nt) + '</span></td><td class="num"><b>' + won(T.inc) + '</b><br><span class="faint">지방 ' + won(T.loc) + '</span></td><td class="num">' + won(T.np) + '</td><td class="num">' + won(T.hi) + '</td><td class="num">' + won(T.lt) + '</td><td class="num">' + won(T.ei) + '</td></tr></tfoot>' : '';
     return form + premForm + sumBox + '<section class="card"><h3>월별 급여표(재직기간 ' + range.start + ' ~ ' + range.end + ')</h3><div class="tbl-wrap"><table class="pay-table"><thead><tr><th>월</th><th class="num">급여</th><th class="num">원천징수</th><th class="num">국민연금</th><th class="num">건강</th><th class="num">장기요양</th><th class="num">고용</th></tr></thead><tbody>' + rows + '</tbody>' + foot + '</table></div><div class="faint">총급여 계산 방식은 설정에서 "예상연봉 고정" 또는 "월별 추정" 중 선택합니다(현재: ' + (state.profile.salaryForecastMode === 'MONTHLY' ? '월별 추정' : '예상연봉 고정') + ').</div></section>';
   }
@@ -799,7 +800,7 @@
       var nt = num(d.nonTaxable) || 0; if (nt > gross) return toast('비과세가 급여를 초과합니다', true);
       var prev = state.payroll[ym] || {};
       var auto = E.estimatePremiums(ym, gross, nt, rp);
-      state.payroll[ym] = { yearMonth: ym, gross: gross, nonTaxable: nt, incomeTaxWithheld: num(d.incomeTaxWithheld), localTaxWithheld: num(d.localTaxWithheld), status: d.status, premiums: E.mergePremiums(prev.premiums, auto) };
+      state.payroll[ym] = { yearMonth: ym, gross: gross, nonTaxable: nt, incomeTaxWithheld: num(d.incomeTaxWithheld), localTaxWithheld: num(d.localTaxWithheld), status: ym <= todayYm() ? 'ACTUAL' : 'FORECAST', premiums: E.mergePremiums(prev.premiums, auto) };
       ui.editingPayroll = null; persist().then(function (ok) { if (ok) toast(ym + ' 급여 저장됨'); render(); }); return;
     }
     if (kind === 'premiums') {
@@ -918,6 +919,14 @@
       case 'demo': loadDemo(); break;
       case 'edit-payroll': ui.editingPayroll = ym; ui.editingPremiums = null; render(); focusForm('payroll', 'gross'); break;
       case 'cancel-payroll': ui.editingPayroll = null; render(); break;
+      case 'payroll-fill': {
+        // 비어 있는 달만, 가장 최근에 입력한 달과 같은 금액으로 채운다(이미 입력한 달은 그대로)
+        var ms = E.monthsInRange(E.employmentRange(state.profile)), done = ms.filter(function (m) { return state.payroll[m]; });
+        if (!done.length) break;
+        var src = state.payroll[done[done.length - 1]], filled = 0;
+        ms.forEach(function (m) { if (state.payroll[m]) return; state.payroll[m] = { yearMonth: m, gross: src.gross, nonTaxable: src.nonTaxable, incomeTaxWithheld: src.incomeTaxWithheld, localTaxWithheld: src.localTaxWithheld, status: m <= todayYm() ? 'ACTUAL' : 'FORECAST', premiums: E.mergePremiums(null, E.estimatePremiums(m, src.gross, src.nonTaxable, rp)) }; filled++; });
+        persist().then(function () { toast(filled + '개월을 ' + done[done.length - 1] + '과 같은 금액으로 채웠어요'); render(); }); break;
+      }
       case 'del-payroll': delete state.payroll[ym]; persist().then(render); break;
       case 'edit-premiums': ui.editingPremiums = ym; render(); focusForm('premiums', 'nationalPension'); break;
       case 'cancel-premiums': ui.editingPremiums = null; render(); break;
