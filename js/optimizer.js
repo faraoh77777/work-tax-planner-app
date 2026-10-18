@@ -78,7 +78,7 @@
 
   function optimize(state, rules) {
     var base = Engine.calc(state, rules);
-    if (base.blocked) return { available: false, reason: '총급여 미입력' };
+    if (base.blocked) return { available: false, reason: '연봉 미입력' };
     var budget = Math.max(0, Math.floor((state.budget && state.budget.remainingBudget) || 0));
     var range = Engine.employmentRange(state.profile);
     var date = range.end;
@@ -126,9 +126,9 @@
     var rec = pack(best, '추천안(세액 기준)');
     var ref = pack(bestDed, '참고안(공제 최대)');
     var sqp = pack(sq, '현상유지안');
-    if (base.determinedTax === 0) notes.push('결정세액이 0이므로 추가 절세 효과가 없습니다');
-    if (rec.taxSaving === 0 && budget > 0) notes.push('추가 지출로 세액이 줄지 않습니다(한도 도달 또는 결정세액 0)');
-    if (!rec.limitsReached.basic && budget > 0) notes.push('예산 안에서 기본한도에 도달하지 못합니다');
+    if (base.determinedTax === 0) notes.push('내야 할 세금이 0이므로 추가 절세 효과가 없습니다');
+    if (rec.taxSaving === 0 && budget > 0) notes.push('추가 지출로 세액이 줄지 않습니다(한도 도달 또는 내야 할 세금 0)');
+    if (!rec.limitsReached.basic && budget > 0) notes.push('예산 안에서 기본 공제 한도에 도달하지 못합니다');
     if (ties.length) notes.push('세액이 같은 대안 ' + ties.length + '개 있음');
     var months = remainingMonths(state);
     return { available: true, step: step, evaluations: evals, budget: budget, buckets: buckets.map(function (b) { return { key: b.key, label: b.label, cap: b.cap === Infinity ? null : b.cap }; }), recommended: rec, reference: ref, statusQuo: sqp, ties: ties.map(function (t) { return pack(t, '대안'); }), baselineTax: base.totalTax, baselineDeduction: base.card.total_deduction, notes: notes, remainingMonths: months, baseline: base };

@@ -227,7 +227,7 @@
       var cultureOk = gross <= c.cultureGrossCap;
       if (cat === 'SPORTS_FACILITY' && e.date < c.sportsFacilityFrom) cultureOk = false;
       if (cultureOk) return { bucket: 'C', amount: amt };
-      return { bucket: pmBucket, amount: amt, reason: cat === 'SPORTS_FACILITY' && e.date < c.sportsFacilityFrom ? '수영장·체력단련장 ' + c.sportsFacilityFrom + ' 이전 결제 → 결제수단 공제율' : '총급여 7천만원 초과 → 결제수단 공제율' };
+      return { bucket: pmBucket, amount: amt, reason: cat === 'SPORTS_FACILITY' && e.date < c.sportsFacilityFrom ? '수영장·체력단련장 ' + c.sportsFacilityFrom + ' 이전 결제 → 결제수단 공제율' : '연봉 7천만원 초과 → 결제수단 공제율' };
     }
     return { bucket: pmBucket, amount: amt };
   }
@@ -263,9 +263,9 @@
     var r = c.rates;
     var rateAmt = { A: fl(sums.A * r.CREDIT), B: fl(sums.B * r.DEBIT), C: fl(sums.C * r.CULTURE), D: fl(sums.D * r.TRADITIONAL_MARKET), E: fl(sums.E * r.PUBLIC_TRANSIT) };
     var excludedDeduction = 0, excludedCase = '';
-    if (total < minUse) { excludedDeduction = rateAmt.A + rateAmt.B + rateAmt.C + rateAmt.D + rateAmt.E; excludedCase = '최저사용액 미달'; }
-    else if (sums.A >= minUse) { excludedDeduction = fl(minUse * r.CREDIT); excludedCase = '(a) ㉮ ≥ 최저사용액'; }
-    else if (sums.A + sums.B + sums.C >= minUse) { excludedDeduction = fl(sums.A * r.CREDIT + (minUse - sums.A) * r.DEBIT); excludedCase = '(b) ㉮+㉯+㉰ ≥ 최저사용액 > ㉮'; }
+    if (total < minUse) { excludedDeduction = rateAmt.A + rateAmt.B + rateAmt.C + rateAmt.D + rateAmt.E; excludedCase = '카드 공제 시작선 미달'; }
+    else if (sums.A >= minUse) { excludedDeduction = fl(minUse * r.CREDIT); excludedCase = '(a) ㉮ ≥ 카드 공제 시작선'; }
+    else if (sums.A + sums.B + sums.C >= minUse) { excludedDeduction = fl(sums.A * r.CREDIT + (minUse - sums.A) * r.DEBIT); excludedCase = '(b) ㉮+㉯+㉰ ≥ 카드 공제 시작선 > ㉮'; }
     else { excludedDeduction = fl(sums.A * r.CREDIT + (sums.B + sums.C) * r.DEBIT + (minUse - sums.A - sums.B - sums.C) * r.TRADITIONAL_MARKET); excludedCase = '(c) 그 밖'; }
     var deductible = Math.max(0, rateAmt.A + rateAmt.B + rateAmt.C + rateAmt.D + rateAmt.E - excludedDeduction);
     var general = Math.min(deductible, tier.basic);
@@ -434,7 +434,7 @@
     var amount = sumAmt(inputs.RENT_CREDIT);
     var eligible = gross <= r.grossCap && sc.isHomeless === true && sc.isHouseholdHead === true;
     var reasons = [];
-    if (gross > r.grossCap) reasons.push('총급여 8천만원 초과');
+    if (gross > r.grossCap) reasons.push('연봉 8천만원 초과');
     if (sc.isHomeless !== true) reasons.push(sc.isHomeless === null || sc.isHomeless === undefined ? '무주택 여부 미입력(확인 필요)' : '무주택 아님');
     if (sc.isHouseholdHead !== true) reasons.push('세대주 아님');
     var rate = gross <= r.lowGrossCap ? r.lowRate : r.rate;
@@ -539,7 +539,7 @@
 
     var sc = state.profile.selfConditions || {};
     var marriage = (typeof sc.marriageRegisteredYear === 'number' && sc.marriageRegisteredYear >= rules.marriageCredit.yearsFrom && sc.marriageRegisteredYear <= rules.marriageCredit.yearsTo && sc.marriageRegisteredYear === state.profile.year) ? rules.marriageCredit.amount : 0;
-    var marriageNote = typeof sc.marriageRegisteredYear === 'number' && !marriage ? (sc.marriageRegisteredYear < rules.marriageCredit.yearsFrom || sc.marriageRegisteredYear > rules.marriageCredit.yearsTo ? '혼인신고 연도 적용 기간 밖' : '혼인신고 연도가 귀속연도와 다름(신고한 해에만 공제)') : '';
+    var marriageNote = typeof sc.marriageRegisteredYear === 'number' && !marriage ? (sc.marriageRegisteredYear < rules.marriageCredit.yearsFrom || sc.marriageRegisteredYear > rules.marriageCredit.yearsTo ? '혼인신고 연도 적용 기간 밖' : '혼인신고 연도가 연말정산 연도와 다름(신고한 해에만 공제)') : '';
     var childN = personal.flags.filter(function (f) { return f.isChildTaxCreditTarget; }).length;
     var ct = rules.childTaxCredit.amounts;
     var childCredit = childN === 0 ? 0 : childN === 1 ? ct.one : childN === 2 ? ct.two : ct.threePlusBase + (childN - 2) * ct.threePlusEach;
@@ -568,12 +568,12 @@
       apply('CHILD', '자녀세액공제', childCredit + birthAdoption, childN + '명' + (birthAdoption ? ' + 출산·입양 ' + birthAdoption.toLocaleString() : ''));
       if (useItemized) {
         apply('INSURANCE', '보장성보험료', insurance.credit);
-        apply('MEDICAL', '의료비', medical.credit, medical.belowThreshold ? '총급여 3% 미달' : '');
+        apply('MEDICAL', '의료비', medical.credit, medical.belowThreshold ? '연봉 3% 미달' : '');
         apply('EDUCATION', '교육비', education.credit);
       }
       apply('POLITICAL', '정치자금기부금', donation.political);
       apply('HOMETOWN', '고향사랑기부금', donation.hometown);
-      if (!useItemized) apply('STANDARD', '표준세액공제', rules.standardTaxCredit.amount, '특별소득·세액공제·월세 미신청');
+      if (!useItemized) apply('STANDARD', '기본 세액공제(13만원)', rules.standardTaxCredit.amount, '특별소득·세액공제·월세 미신청');
       if (useItemized) {
         apply('RENT', '월세액', rent.credit, rent.eligible ? (rent.rate * 100) + '%' : rent.reasons.join(', '));
         apply('DONATION_SPECIAL_GENERAL', '특례·일반기부금', donation.specialGeneral);
@@ -610,10 +610,10 @@
     });
     result.withheld = { income: wIncome, local: wLocal, any: anyWithheld };
     if (anyWithheld) result.settlement = result.totalTax - (wIncome + wLocal);
-    else { result.settlement = null; warnings.push('기납부세액(원천징수 소득세·지방소득세) 미입력 → 정산액(환급/추가납부) 보류'); }
-    if (prem.unverified) warnings.push('4대보험 추정값은 공단 요율 미대조(확인 필요) — 급여명세서 값으로 수정 가능');
+    else { result.settlement = null; warnings.push('미리 낸 세금(미리 낸 소득세·지방소득세) 미입력 → 정산액(환급/추가납부) 보류'); }
+    if (prem.unverified) warnings.push('4대보험은 추정값이에요 — 급여명세서 값으로 고칠 수 있어요');
     if (prem.needsConfirm) warnings.push('4대보험 일부 항목 규칙 없음(확인 필요)');
-    if (rules.verificationLevel !== 'CASE_VERIFIED') warnings.push('규칙팩 ' + rules.version + ' 검증단계 ' + rules.verificationLevel + ': 확정 환급액이 아닌 예상치');
+    result.estimateOnly = rules.verificationLevel !== 'CASE_VERIFIED'; // 공식 사례 검증 전 → 예상치(화면 경고에는 넣지 않음)
     return result;
   }
 
@@ -627,7 +627,7 @@
   // ---------- 최적 사용 플랜 (REQ-015) ----------
   function buildOptimalPlan(state, rules) {
     var base = calc(state, rules);
-    if (base.blocked) return { available: false, reason: '총급여 미입력', missing: base.missingFields };
+    if (base.blocked) return { available: false, reason: '연봉 미입력', missing: base.missingFields };
     var gross = base.gross;
     var c = rules.card;
     var range = employmentRange(state.profile);
@@ -641,8 +641,8 @@
     var need1 = Math.max(0, card0.minUse - card0.total);
     var e1 = extras.slice(); if (need1 > 0) e1.push(mkExtra('plan1', need1, 'CREDIT', 'GENERAL', date));
     var r1 = calcWithExtra(state, rules, e1);
-    stages.push({ key: 'THRESHOLD', label: '최저사용액까지', method: '신용카드로 채워도 무방(어떤 수단이든 공제 0)', target: card0.minUse, current: Math.min(card0.total, card0.minUse), need: need1, deduction: 0, taxSaving: Math.max(0, tax0 - r1.totalTax), progress: card0.minUse > 0 ? Math.min(1, card0.total / card0.minUse) : 1,
-      why: '최저사용액은 신용카드 15%분부터 차감되므로(안내 p.41 ①) 이 구간은 신용카드를 써도 손해가 없습니다.' });
+    stages.push({ key: 'THRESHOLD', label: '카드 공제 시작선까지', method: '신용카드로 채워도 무방(어떤 수단이든 공제 0)', target: card0.minUse, current: Math.min(card0.total, card0.minUse), need: need1, deduction: 0, taxSaving: Math.max(0, tax0 - r1.totalTax), progress: card0.minUse > 0 ? Math.min(1, card0.total / card0.minUse) : 1,
+      why: '카드 공제 시작선은 신용카드 15%분부터 차감되므로(안내 p.41 ①) 이 구간은 신용카드를 써도 손해가 없습니다.' });
     extras = e1;
     // 2단계: 체크·현금영수증으로 기본한도
     var card1 = r1.card;
@@ -650,8 +650,8 @@
     var need2 = remainBasic > 0 ? ceilTo(remainBasic / c.rates.DEBIT, unit) : 0;
     var e2 = extras.slice(); if (need2 > 0) e2.push(mkExtra('plan2', need2, 'DEBIT', 'GENERAL', date));
     var r2 = calcWithExtra(state, rules, e2);
-    stages.push({ key: 'BASIC', label: '기본한도 채우기', method: '체크·직불·선불·현금영수증(' + (c.rates.DEBIT * 100) + '%)', target: card1.basicLimit, current: card1.general, need: need2, deduction: r2.card.general - card1.general, taxSaving: Math.max(0, r1.totalTax - r2.totalTax), progress: card1.basicLimit > 0 ? Math.min(1, card1.general / card1.basicLimit) : 1,
-      why: '최저사용액을 넘긴 뒤에는 공제율이 높은 수단(30%)으로 기본한도 ' + card1.basicLimit.toLocaleString() + '원을 채우는 것이 가장 적은 지출로 한도에 닿습니다.' });
+    stages.push({ key: 'BASIC', label: '기본 공제 한도 채우기', method: '체크·직불·선불·현금영수증(' + (c.rates.DEBIT * 100) + '%)', target: card1.basicLimit, current: card1.general, need: need2, deduction: r2.card.general - card1.general, taxSaving: Math.max(0, r1.totalTax - r2.totalTax), progress: card1.basicLimit > 0 ? Math.min(1, card1.general / card1.basicLimit) : 1,
+      why: '카드 공제 시작선을 넘긴 뒤에는 공제율이 높은 수단(30%)으로 기본 공제 한도 ' + card1.basicLimit.toLocaleString() + '원을 채우는 것이 가장 적은 지출로 한도에 닿습니다.' });
     extras = e2;
     // 3단계: 전통시장·대중교통(·문화체육)으로 추가한도
     var card2 = r2.card;
@@ -659,8 +659,8 @@
     var need3 = remainExtra > 0 ? ceilTo(remainExtra / c.rates.TRADITIONAL_MARKET, unit) : 0;
     var e3 = extras.slice(); if (need3 > 0) e3.push(mkExtra('plan3', need3, 'DEBIT', 'TRADITIONAL_MARKET', date));
     var r3 = calcWithExtra(state, rules, e3);
-    stages.push({ key: 'EXTRA', label: '추가한도 채우기', method: '전통시장·대중교통(' + (c.rates.TRADITIONAL_MARKET * 100) + '%)' + (card0.cultureEligible ? ' · 문화체육(' + (c.rates.CULTURE * 100) + '%)' : ''), target: card2.extraLimit, current: card2.extra, need: need3, deduction: r3.card.extra - card2.extra, taxSaving: Math.max(0, r2.totalTax - r3.totalTax), progress: card2.extraLimit > 0 ? Math.min(1, card2.extra / card2.extraLimit) : 1,
-      why: '전통시장·대중교통 사용분은 40%로 계산되고 추가한도 ' + card2.extraLimit.toLocaleString() + '원에 따로 들어갑니다.' + (card0.cultureEligible ? ' 문화체육(30%)도 추가한도에 포함됩니다.' : ' 총급여 7천만원 초과자는 문화체육 30%가 적용되지 않습니다.') });
+    stages.push({ key: 'EXTRA', label: '시장·교통 추가 한도 채우기', method: '전통시장·대중교통(' + (c.rates.TRADITIONAL_MARKET * 100) + '%)' + (card0.cultureEligible ? ' · 문화체육(' + (c.rates.CULTURE * 100) + '%)' : ''), target: card2.extraLimit, current: card2.extra, need: need3, deduction: r3.card.extra - card2.extra, taxSaving: Math.max(0, r2.totalTax - r3.totalTax), progress: card2.extraLimit > 0 ? Math.min(1, card2.extra / card2.extraLimit) : 1,
+      why: '전통시장·대중교통 사용분은 40%로 계산되고 시장·교통 추가 한도 ' + card2.extraLimit.toLocaleString() + '원에 따로 들어갑니다.' + (card0.cultureEligible ? ' 문화체육(30%)도 시장·교통 추가 한도에 포함됩니다.' : ' 연봉 7천만원 초과자는 문화체육 30%가 적용되지 않습니다.') });
     var totalNeed = need1 + need2 + need3;
     var saturation = card0.total + totalNeed;
     // 의료비·기부금
@@ -670,7 +670,7 @@
     var dr = rules.donation;
     var autoApplied = {
       gross: gross,
-      limitTier: { basic: card0.basicLimit, extra: card0.extraLimit, label: gross <= c.limitTiers[0].grossUpTo ? '총급여 7천만원 이하' : '총급여 7천만원 초과' },
+      limitTier: { basic: card0.basicLimit, extra: card0.extraLimit, label: gross <= c.limitTiers[0].grossUpTo ? '연봉 7천만원 이하' : '연봉 7천만원 초과' },
       minUse: card0.minUse,
       cultureEligible: card0.cultureEligible,
       medicalThreshold: medThreshold,
@@ -687,7 +687,7 @@
       available: true, gross: gross, unit: unit, stages: stages, totalNeed: totalNeed, saturation: saturation,
       totalDeduction: r3.card.total_deduction, totalTaxSaving: Math.max(0, tax0 - r3.totalTax),
       medical: { threshold: medThreshold, rate: rules.medical.rate, generalCap: rules.medical.generalCap, current: med.total, credit: med.credit, progress: medThreshold > 0 ? Math.min(1, med.total / medThreshold) : 1 },
-      donation: { hometownLowCap: dr.hometown.lowCap, hometownLowRatio: dr.hometown.lowRatio, hometownRate: dr.hometown.rate, generalLowUpTo: dr.general.lowUpTo, generalLowRate: dr.general.lowRate, generalHighRate: dr.general.highRate, current: don.amounts, credit: don.political + don.hometown + don.specialGeneral, capNote: '특례·일반 기부금 한도는 총급여가 아닌 근로소득금액(' + base.earnedIncome.toLocaleString() + '원) 기준' },
+      donation: { hometownLowCap: dr.hometown.lowCap, hometownLowRatio: dr.hometown.lowRatio, hometownRate: dr.hometown.rate, generalLowUpTo: dr.general.lowUpTo, generalLowRate: dr.general.lowRate, generalHighRate: dr.general.highRate, current: don.amounts, credit: don.political + don.hometown + don.specialGeneral, capNote: '특례·일반 기부금 한도는 연봉이 아닌 근로소득(' + base.earnedIncome.toLocaleString() + '원) 기준' },
       autoApplied: autoApplied,
       hasInputs: state.expenses.length > 0 || state.deductions.length > 0 || state.family.length > 0,
       baseline: base,
@@ -707,9 +707,9 @@
     plan.stages.forEach(function (s) {
       var c = rules.card.rates;
       var map = {
-        THRESHOLD: { label: '신용카드', sub: '최저사용액(총급여 25%)까지', rate: pctText(c.CREDIT) + '(이 구간 공제 0)', type: '소득공제' },
-        BASIC: { label: '체크카드·현금영수증', sub: '기본한도 채우기', rate: pctText(c.DEBIT), type: '소득공제' },
-        EXTRA: { label: '전통시장·대중교통', sub: '추가한도 채우기' + (plan.autoApplied.cultureEligible ? '(문화체육 ' + pctText(c.CULTURE) + ' 포함)' : ''), rate: pctText(c.TRADITIONAL_MARKET), type: '소득공제' }
+        THRESHOLD: { label: '신용카드', sub: '카드 공제 시작선(연봉 25%)까지', rate: pctText(c.CREDIT) + '(이 구간 공제 0)', type: '소득공제' },
+        BASIC: { label: '체크카드·현금영수증', sub: '기본 공제 한도 채우기', rate: pctText(c.DEBIT), type: '소득공제' },
+        EXTRA: { label: '전통시장·대중교통', sub: '시장·교통 추가 한도 채우기' + (plan.autoApplied.cultureEligible ? '(문화체육 ' + pctText(c.CULTURE) + ' 포함)' : ''), rate: pctText(c.TRADITIONAL_MARKET), type: '소득공제' }
       }[s.key];
       rows.push({ key: s.key, group: 'CARD', label: map.label, sub: map.sub, rate: map.rate, type: map.type, maxUse: s.need, deduction: s.deduction, taxSaving: s.key === 'THRESHOLD' ? 0 : s.taxSaving, conditional: false });
     });
@@ -741,7 +741,7 @@
     // 주택청약종합저축: 총급여 7천만원 이하 + 무주택 세대주, 연 300만원 × 40% 소득공제
     var hs = rules.housing.subscription, sc = state.profile.selfConditions || {};
     var curSub = sumAmt(inputs.HOUSING_SUBSCRIPTION), addSub = Math.max(0, hs.annualPayCap - curSub);
-    if (gross > hs.grossCap) rows.push({ key: 'SUBSCRIPTION', group: 'OTHER', label: '주택청약종합저축', sub: '총급여 7천만원 초과 → 대상 아님', rate: pctText(hs.rate), type: '소득공제', maxUse: 0, deduction: 0, taxSaving: 0, conditional: false, na: true });
+    if (gross > hs.grossCap) rows.push({ key: 'SUBSCRIPTION', group: 'OTHER', label: '주택청약종합저축', sub: '연봉 7천만원 초과 → 대상 아님', rate: pctText(hs.rate), type: '소득공제', maxUse: 0, deduction: 0, taxSaving: 0, conditional: false, na: true });
     else {
       var subEligible = sc.isHomeless === true && sc.isHouseholdHead === true;
       var rs = step('SUBSCRIPTION', '주택청약종합저축', '연 ' + won0(hs.annualPayCap) + ' 납입 한도', pctText(hs.rate), '소득공제', addSub > 0 ? [entry('HOUSING_SUBSCRIPTION', addSub)] : [], addSub, subEligible ? null : { isHomeless: true, isHouseholdHead: true }, subEligible ? '' : '무주택 세대주일 때 금액(설정에서 무주택·세대주 체크 시 합계에 포함)');
@@ -791,18 +791,18 @@
     var cultureOk = gross <= c.cultureGrossCap, rentRate = gross <= rt.lowGrossCap ? rt.lowRate : rt.rate;
     var M = function (o) { return o; };
     return [
-      M({ key: 'CARD_CREDIT', group: 'CARD', label: '신용카드', sub: '최저사용액(총급여 25%)까지는 어떤 수단이든 공제 0 — 신용카드로 채워도 손해 없음', rate: pctText(c.rates.CREDIT), cap: '최저사용액 ' + won0(minUse), on: true, amount: minUse, metric: 'card' }),
-      M({ key: 'CARD_DEBIT', group: 'CARD', label: '체크카드·현금영수증', sub: '최저사용액을 넘긴 뒤 기본한도 채우기', rate: pctText(c.rates.DEBIT), cap: '기본한도 ' + won0(lim.basic), on: true, amount: ceilTo(lim.basic / c.rates.DEBIT, 10000), metric: 'card' }),
-      M({ key: 'CARD_MARKET', group: 'CARD', label: '전통시장', sub: '추가한도(시장·교통·문화 합산)', rate: pctText(c.rates.TRADITIONAL_MARKET), cap: '추가한도 ' + won0(lim.extra), on: true, amount: ceilTo(lim.extra / c.rates.TRADITIONAL_MARKET, 10000), metric: 'card' }),
-      M({ key: 'CARD_TRANSIT', group: 'CARD', label: '대중교통', sub: '전통시장과 추가한도를 함께 씀(이미 다 채웠으면 효과 없음)', rate: pctText(c.rates.PUBLIC_TRANSIT), cap: '추가한도 합산', on: false, amount: 1200000, metric: 'card' }),
-      M({ key: 'CARD_CULTURE', group: 'CARD', label: '문화체육(도서·공연·영화·수영장·헬스)', sub: cultureOk ? '추가한도 합산' : '총급여 7천만원 초과 → 대상 아님', rate: pctText(c.rates.CULTURE), cap: '추가한도 합산', on: false, amount: 1000000, na: !cultureOk, metric: 'card' }),
+      M({ key: 'CARD_CREDIT', group: 'CARD', label: '신용카드', sub: '카드 공제 시작선(연봉 25%)까지는 어떤 수단이든 공제 0 — 신용카드로 채워도 손해 없음', rate: pctText(c.rates.CREDIT), cap: '카드 공제 시작선 ' + won0(minUse), on: true, amount: minUse, metric: 'card' }),
+      M({ key: 'CARD_DEBIT', group: 'CARD', label: '체크카드·현금영수증', sub: '카드 공제 시작선을 넘긴 뒤 기본 공제 한도 채우기', rate: pctText(c.rates.DEBIT), cap: '기본 공제 한도 ' + won0(lim.basic), on: true, amount: ceilTo(lim.basic / c.rates.DEBIT, 10000), metric: 'card' }),
+      M({ key: 'CARD_MARKET', group: 'CARD', label: '전통시장', sub: '시장·교통 추가 한도(시장·교통·문화 합산)', rate: pctText(c.rates.TRADITIONAL_MARKET), cap: '시장·교통 추가 한도 ' + won0(lim.extra), on: true, amount: ceilTo(lim.extra / c.rates.TRADITIONAL_MARKET, 10000), metric: 'card' }),
+      M({ key: 'CARD_TRANSIT', group: 'CARD', label: '대중교통', sub: '전통시장과 시장·교통 추가 한도를 함께 씀(이미 다 채웠으면 효과 없음)', rate: pctText(c.rates.PUBLIC_TRANSIT), cap: '시장·교통 추가 한도 합산', on: false, amount: 1200000, metric: 'card' }),
+      M({ key: 'CARD_CULTURE', group: 'CARD', label: '문화체육(도서·공연·영화·수영장·헬스)', sub: cultureOk ? '시장·교통 추가 한도 합산' : '연봉 7천만원 초과 → 대상 아님', rate: pctText(c.rates.CULTURE), cap: '시장·교통 추가 한도 합산', on: false, amount: 1000000, na: !cultureOk, metric: 'card' }),
       M({ key: 'PENSION_SAVING', group: 'SAVING', label: '연금저축', sub: '연금계좌 세액공제(IRP와 합산 ' + won0(pa.totalCap) + ')', rate: pctText(pRate), cap: won0(pa.savingCap), on: true, amount: pa.savingCap, max: pa.savingCap, metric: 'pension', type: '세액공제' }),
       M({ key: 'IRP', group: 'SAVING', label: 'IRP(개인형 퇴직연금)', sub: '연금저축과 합산 ' + won0(pa.totalCap) + ' 한도', rate: pctText(pRate), cap: won0(pa.totalCap - pa.savingCap) + '(합산 기준)', on: true, amount: pa.totalCap - pa.savingCap, max: pa.totalCap, metric: 'pension', type: '세액공제' }),
       M({ key: 'ISA', group: 'SAVING', label: 'ISA 만기 연금계좌 전환', sub: '전환액의 10%, 최대 ' + won0(pa.isaConversion.cap) + ' 추가', rate: pctText(pRate), cap: '전환 ' + won0(pa.isaConversion.cap / pa.isaConversion.rate), on: false, amount: fl(pa.isaConversion.cap / pa.isaConversion.rate), metric: 'pension', type: '세액공제' }),
-      M({ key: 'SUBSCRIPTION', group: 'SAVING', label: '주택청약종합저축', sub: gross > hs.subscription.grossCap ? '총급여 7천만원 초과 → 대상 아님' : '무주택 세대주만', rate: pctText(hs.subscription.rate), cap: won0(hs.subscription.annualPayCap), on: true, amount: hs.subscription.annualPayCap, max: hs.subscription.annualPayCap, na: gross > hs.subscription.grossCap, needsHomeless: true, metric: 'housing', type: '소득공제' }),
+      M({ key: 'SUBSCRIPTION', group: 'SAVING', label: '주택청약종합저축', sub: gross > hs.subscription.grossCap ? '연봉 7천만원 초과 → 대상 아님' : '무주택 세대주만', rate: pctText(hs.subscription.rate), cap: won0(hs.subscription.annualPayCap), on: true, amount: hs.subscription.annualPayCap, max: hs.subscription.annualPayCap, na: gross > hs.subscription.grossCap, needsHomeless: true, metric: 'housing', type: '소득공제' }),
       M({ key: 'INSURANCE', group: 'INSURANCE', label: '보장성보험(자동차·실손·종신 등)', sub: '연 100만원 한도', rate: pctText(rules.insurance.rate), cap: won0(rules.insurance.cap), on: true, amount: rules.insurance.cap, max: rules.insurance.cap, metric: 'insurance' }),
       M({ key: 'INSURANCE_DISABLED', group: 'INSURANCE', label: '장애인전용 보장성보험', sub: '장애인 피보험자', rate: pctText(rules.insurance.disabledRate), cap: won0(rules.insurance.disabledCap), on: false, amount: rules.insurance.disabledCap, max: rules.insurance.disabledCap, metric: 'insurance' }),
-      M({ key: 'MED_SELF', group: 'MEDICAL', label: '본인·65세 이상·6세 이하·장애인', sub: '한도 없음. 총급여 3%(' + won0(medThr) + ') 넘는 금액부터', rate: pctText(md.rate), cap: '한도 없음', on: false, amount: ceilTo(medThr + 1000000, 10000), metric: 'medical', example: true }),
+      M({ key: 'MED_SELF', group: 'MEDICAL', label: '본인·65세 이상·6세 이하·장애인', sub: '한도 없음. 연봉 3%(' + won0(medThr) + ') 넘는 금액부터', rate: pctText(md.rate), cap: '한도 없음', on: false, amount: ceilTo(medThr + 1000000, 10000), metric: 'medical', example: true }),
       M({ key: 'MED_GENERAL', group: 'MEDICAL', label: '그 외 부양가족', sub: '공제대상 ' + won0(md.generalCap) + ' 한도', rate: pctText(md.rate), cap: won0(md.generalCap) + '(문턱 초과분)', on: false, amount: ceilTo(medThr + 1000000, 10000), metric: 'medical', example: true }),
       M({ key: 'MED_INFERTILITY', group: 'MEDICAL', label: '난임시술비', sub: '한도 없음', rate: pctText(md.infertilityRate), cap: '한도 없음', on: false, amount: 3000000, metric: 'medical', example: true }),
       M({ key: 'MED_GLASSES', group: 'MEDICAL', label: '안경·콘택트렌즈', sub: '1인 50만원까지 의료비에 포함', rate: pctText(md.rate), cap: won0(md.glassesCapPerPerson) + '/인', on: false, amount: md.glassesCapPerPerson, max: md.glassesCapPerPerson, metric: 'medical' }),
@@ -813,10 +813,10 @@
       M({ key: 'DON_HOMETOWN', group: 'DONATION', label: '고향사랑기부(10만원까지)', sub: '100/110 공제 + 지방세 → 사실상 전액 환급, 답례품 별도', rate: '100/110', cap: won0(dn.hometown.lowCap), on: true, amount: dn.hometown.lowCap, max: dn.hometown.lowCap, metric: 'donation' }),
       M({ key: 'DON_HOMETOWN_MORE', group: 'DONATION', label: '고향사랑기부 추가분', sub: '10만원 초과분, 연 ' + won0(dn.hometown.annualCap) + '까지', rate: pctText(dn.hometown.rate), cap: won0(dn.hometown.annualCap - dn.hometown.lowCap), on: false, amount: 400000, max: dn.hometown.annualCap - dn.hometown.lowCap, metric: 'donation', example: true }),
       M({ key: 'DON_POLITICAL', group: 'DONATION', label: '정치자금 기부(10만원까지)', sub: '100/110 공제', rate: '100/110', cap: won0(dn.political.lowCap), on: false, amount: dn.political.lowCap, metric: 'donation' }),
-      M({ key: 'DON_SPECIAL', group: 'DONATION', label: '특례기부금(국가·재난·대학 등)', sub: '근로소득금액 100% 한도', rate: pctText(dn.special.lowRate) + '(1천만원 초과 ' + pctText(dn.special.highRate) + ')', cap: '소득 100%', on: false, amount: 1000000, metric: 'donation', example: true }),
-      M({ key: 'DON_GENERAL', group: 'DONATION', label: '일반기부금(종교 외)', sub: '근로소득금액 30% 한도', rate: pctText(dn.general.lowRate), cap: '소득 30%', on: false, amount: 1000000, metric: 'donation', example: true }),
-      M({ key: 'DON_RELIGIOUS', group: 'DONATION', label: '종교단체 기부금', sub: '근로소득금액 10% 한도', rate: pctText(dn.religious.lowRate), cap: '소득 10%', on: false, amount: 1000000, metric: 'donation', example: true }),
-      M({ key: 'RENT', group: 'HOUSING', label: '월세 세액공제', sub: gross > rt.grossCap ? '총급여 8천만원 초과 → 대상 아님' : '무주택 세대주, 국민주택규모·기준시가 4억 이하', rate: pctText(rentRate), cap: won0(rt.rentCap), on: false, amount: 6000000, max: rt.rentCap, na: gross > rt.grossCap, needsHomeless: true, metric: 'rent', example: true }),
+      M({ key: 'DON_SPECIAL', group: 'DONATION', label: '특례기부금(국가·재난·대학 등)', sub: '근로소득 100% 한도', rate: pctText(dn.special.lowRate) + '(1천만원 초과 ' + pctText(dn.special.highRate) + ')', cap: '소득 100%', on: false, amount: 1000000, metric: 'donation', example: true }),
+      M({ key: 'DON_GENERAL', group: 'DONATION', label: '일반기부금(종교 외)', sub: '근로소득 30% 한도', rate: pctText(dn.general.lowRate), cap: '소득 30%', on: false, amount: 1000000, metric: 'donation', example: true }),
+      M({ key: 'DON_RELIGIOUS', group: 'DONATION', label: '종교단체 기부금', sub: '근로소득 10% 한도', rate: pctText(dn.religious.lowRate), cap: '소득 10%', on: false, amount: 1000000, metric: 'donation', example: true }),
+      M({ key: 'RENT', group: 'HOUSING', label: '월세 세액공제', sub: gross > rt.grossCap ? '연봉 8천만원 초과 → 대상 아님' : '무주택 세대주, 국민주택규모·기준시가 4억 이하', rate: pctText(rentRate), cap: won0(rt.rentCap), on: false, amount: 6000000, max: rt.rentCap, na: gross > rt.grossCap, needsHomeless: true, metric: 'rent', example: true }),
       M({ key: 'RENT_LOAN', group: 'HOUSING', label: '전세대출 원리금 상환', sub: '무주택 세대주, 청약과 합산 공제 ' + won0(hs.rentLoan.combinedCapWithSubscription), rate: pctText(hs.rentLoan.rate), cap: '공제 ' + won0(hs.rentLoan.combinedCapWithSubscription), on: false, amount: 10000000, needsHomeless: true, metric: 'housing', type: '소득공제', example: true }),
       M({ key: 'MORTGAGE', group: 'HOUSING', label: '주택담보대출 이자', sub: '무주택·1주택 세대주, 취득 당시 기준시가 6억 이하. 한도는 아래에서 고른 대출 조건', rate: '100%(소득공제)', cap: '조건별 600만~2천만원', on: false, amount: 8000000, metric: 'mortgage', type: '소득공제', example: true }),
       M({ key: 'MARRIAGE', group: 'OTHER', label: '혼인세액공제', sub: '올해 혼인신고(' + rules.marriageCredit.yearsFrom + '~' + rules.marriageCredit.yearsTo + ', 생애 1회)', rate: '정액', cap: won0(rules.marriageCredit.amount), on: false, toggleOnly: true, metric: 'marriage' }),
