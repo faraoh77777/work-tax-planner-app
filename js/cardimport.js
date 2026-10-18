@@ -50,7 +50,8 @@
     { group: '체크카드', name: '케이뱅크', url: 'https://www.kbanknow.com/' },
     { group: '체크카드', name: '우체국', url: 'https://www.epostbank.go.kr/' },
     { group: '체크카드', name: '새마을금고(MG)', url: 'https://www.kfcc.co.kr/' },
-    { group: '체크카드', name: '신협', url: 'https://www.cu.co.kr/' }
+    { group: '체크카드', name: '신협', url: 'https://www.cu.co.kr/' },
+    { group: '현금영수증', name: '홈택스(국세청)', url: 'https://www.hometax.go.kr/' }
   ];
 
   // 열 제목 인식. 금액은 수수료·잔액·포인트·외화·입금 등 부가 금액 열을 제외한다.
@@ -88,6 +89,8 @@
       if (map.date === undefined && COLS.date.test(h) && !/취소/.test(h)) { map.date = i; if (/일시/.test(h)) map.dateHasTime = true; return; }
       if (map.time === undefined && COLS.time.test(h)) { map.time = i; return; }
       if (map.merchant === undefined && COLS.merchant.test(h) && !MERCHANT_EXCLUDE.test(h.replace(/가맹점/, ''))) { map.merchant = i; return; }
+      // 현금영수증 '용도(소득공제/지출증빙)'·'공제여부' 열 — 사업자용(지출증빙)·불공제 줄은 빼기 위해 따로 잡는다
+      if (map.purpose === undefined && /용도|공제\s*여부/.test(h)) { map.purpose = i; return; }
       if (map.status === undefined && COLS.status.test(h)) { map.status = i; return; }
       if (map.card === undefined && COLS.card.test(h)) { map.card = i; return; }
     });
@@ -150,7 +153,7 @@
    * 반환 items, outOfYear(다른 연도 건수), ignored(합계·빈 줄 등 해석 안 한 줄 수)
    */
   function parseRows(rows, map, year) {
-    var items = [], outOfYear = 0, ignored = 0;
+    var items = [], outOfYear = 0, ignored = 0, notDeductible = 0;
     for (var r = map.headerRow + 1; r < rows.length; r++) {
       var row = rows[r] || [];
       var dt = parseDateTime(row[map.date], year);
@@ -159,6 +162,7 @@
       if (!dt || amt === null || amt === 0 || !merchant || /^(합\s*계|소\s*계|총\s*계)/.test(merchant)) { ignored++; continue; }
       if (map.time !== undefined && !dt.time) { var t2 = parseDateTime('2000.01.01 ' + cellText(row[map.time]), year); if (t2) dt.time = t2.time; }
       if (dt.date.slice(0, 4) !== String(year)) { outOfYear++; continue; }
+      if (map.purpose !== undefined && /지출\s*증빙|사업자|불\s*공제/.test(cellText(row[map.purpose]))) { notDeductible++; continue; }
       var status = map.status !== undefined ? cellText(row[map.status]) : '';
       var cancel = amt < 0 || /취소|반품|환불/.test(status) || (map.cancelDate !== undefined && !!cellText(row[map.cancelDate]));
       var cardTxt = map.card !== undefined ? cellText(row[map.card]) : '';
@@ -170,7 +174,7 @@
         useCategory: cls.useCategory, classified: cls.matched, checkCard: /체크|직불/.test(cardTxt + ' ' + status)
       });
     }
-    return { items: items, outOfYear: outOfYear, ignored: ignored };
+    return { items: items, outOfYear: outOfYear, ignored: ignored, notDeductible: notDeductible };
   }
 
   // 파일(ArrayBuffer) → 첫 번째 거래 시트의 행 배열. CSV는 UTF-8이 아니면 EUC-KR로 읽는다.
@@ -232,12 +236,18 @@
   }
 
   // 폴더 자동 확인에서 이미 처리한 파일인지 판정하는 키(이름·크기·수정시각)
+  // 국세청(홈택스) 현금영수증 사용내역 파일인지: 파일 이름이나 표 위쪽에 '현금영수증', 또는 공급가액·봉사료 열(카드사 파일에는 없음)
+  function isCashReceiptFile(rows, fileName) {
+    if (/현금\s*영수증/.test(fileName || '')) return true;
+    var top = (rows || []).slice(0, 40).map(function (r) { return (r || []).map(cellText).join(' '); }).join(' ');
+    return /현금\s*영수증/.test(top) || (/공급\s*가액/.test(top) && /봉사료/.test(top));
+  }
   function fileKey(f) { return [f.name, f.size, f.lastModified].join('|'); }
   function isSheetFile(name) { return /\.(xlsx|xls|csv)$/i.test(name || '') && !/^~\$/.test(name); }
 
   return {
     ISSUERS: ISSUERS, classifyMerchant: classifyMerchant, mapHeader: mapHeader, detectHeader: detectHeader, guessHeaderRow: guessHeaderRow, headerSignature: headerSignature,
     parseDateTime: parseDateTime, parseAmount: parseAmount, parseRows: parseRows, readWorkbookRows: readWorkbookRows, buildExpenses: buildExpenses, dedupKey: dedupKey,
-    fileKey: fileKey, isSheetFile: isSheetFile
+    fileKey: fileKey, isSheetFile: isSheetFile, isCashReceiptFile: isCashReceiptFile
   };
 });

@@ -251,7 +251,9 @@
   // 카드사 공식 홈페이지에서 사용자가 직접 로그인·다운로드한 엑셀/CSV만 읽는다. PC 크롬·엣지는 연결한 폴더를 자동 확인하고, 그 외에는 파일 선택.
   var canWatchDir = typeof window !== 'undefined' && 'showDirectoryPicker' in window;
   function pad2(n) { return String(n).padStart(2, '0'); }
-  function findCard(id) { return state.cards.find(function (c) { return c.id === id; }) || null; }
+  // 홈택스에서 받은 현금영수증 파일은 카드 대신 이 가상 수단으로 처리(결제수단 = 현금영수증)
+  var CASH = { id: '__cash', alias: '현금영수증', paymentMethod: 'CASH_RECEIPT', spenderId: 'self' };
+  function findCard(id) { return id === '__cash' ? CASH : (state.cards.find(function (c) { return c.id === id; }) || null); }
   function buildPreview(en) {
     en.result = null; en.parsed = null;
     if (!en.map) return;
@@ -268,6 +270,7 @@
       if (!en.map) { var hr = CI.guessHeaderRow(en.rows); en.guessRow = hr; en.map = state.importMappings[CI.headerSignature(en.rows[hr])] || null; }
       var guess = state.cards.find(function (c) { return c.alias && name.indexOf(c.alias) >= 0; });
       if (guess) en.cardId = guess.id;
+      if (CI.isCashReceiptFile(en.rows, name)) en.cardId = '__cash';
       buildPreview(en);
     } catch (e) { en.error = e && e.message || String(e); }
     ui.importQueue.push(en);
@@ -338,9 +341,26 @@
   setInterval(function () { if (ui.dir && ui.dir.perm === 'granted' && !document.hidden) scanDir(); }, 5000);
   document.addEventListener('visibilitychange', function () { if (!document.hidden && ui.dir && ui.dir.perm === 'granted') scanDir(); });
 
+  // 월별 사용 합계(결제수단별): 카드·현금영수증 내역을 올리면 달마다 얼마 썼는지 한눈에. 취소는 빼고, 공제 안 되는 지출은 제외
+  function monthlyUsage() {
+    var y = String(state.profile.year), M = {};
+    (state.expenses || []).forEach(function (e) {
+      if (!e.date || e.date.slice(0, 4) !== y || e.useCategory === 'EXCLUDED' || e.paymentMethod === 'CASH_NONE') return;
+      var m = e.date.slice(5, 7), v = e.refundOf ? -e.amount : e.amount, r = M[m] = M[m] || { CREDIT: 0, DEBIT: 0, CASH_RECEIPT: 0, mt: 0, total: 0 };
+      if (r[e.paymentMethod] !== undefined) r[e.paymentMethod] += v;
+      if (e.useCategory === 'TRADITIONAL_MARKET' || e.useCategory === 'PUBLIC_TRANSIT') r.mt += v;
+      r.total += v;
+    });
+    var ms = Object.keys(M).sort(); if (!ms.length) return '';
+    var T = { CREDIT: 0, DEBIT: 0, CASH_RECEIPT: 0, mt: 0, total: 0 };
+    var rows = ms.map(function (m) { var r = M[m]; Object.keys(T).forEach(function (k) { T[k] += r[k]; }); return '<tr><td>' + Number(m) + '월</td><td class="num">' + won(r.CREDIT) + '</td><td class="num">' + won(r.DEBIT) + '</td><td class="num">' + won(r.CASH_RECEIPT) + '</td><td class="num">' + won(r.mt) + '</td><td class="num"><b>' + won(r.total) + '</b></td></tr>'; }).join('');
+    return '<section class="card"><h3>월별 사용 합계 <span class="faint">(' + y + '년, 공제 대상만)</span></h3><div class="tbl-wrap"><table class="pay-table"><thead><tr><th>월</th><th class="num">신용카드</th><th class="num">체크·직불</th><th class="num">현금영수증</th><th class="num">그중 시장·교통</th><th class="num">합계</th></tr></thead><tbody>' + rows + '</tbody>' +
+      '<tfoot><tr><td><b>합계</b></td><td class="num">' + won(T.CREDIT) + '</td><td class="num">' + won(T.DEBIT) + '</td><td class="num">' + won(T.CASH_RECEIPT) + '</td><td class="num">' + won(T.mt) + '</td><td class="num"><b>' + won(T.total) + '</b></td></tr></tfoot></table></div><div class="faint">취소 건은 빼고 계산했어요. 보험료·세금 등 공제 안 되는 지출은 넣지 않았어요.</div></section>';
+  }
+
   function cardsTab() {
     var links = '<section class="card"><h3>1. 카드사 홈페이지에서 이용내역 받기</h3><div class="faint">버튼을 누르면 카드사 공식 홈페이지가 새 창으로 열립니다. 직접 로그인해 이용내역을 엑셀로 내려받으세요(월말 권장). 문자·메일로 받은 링크나 첨부파일은 쓰지 마세요. 목록에 없는 카드도 엑셀·CSV 파일이면 올릴 수 있습니다.</div>' +
-      ['카드사', '은행', '체크카드'].map(function (g) { return '<div class="faint" style="margin-top:6px">' + (g === '은행' ? '은행 카드(신용·체크)' : g === '체크카드' ? '인터넷은행·우체국·상호금융 체크카드' : '카드사') + '</div><div class="btns">' + CI.ISSUERS.filter(function (i) { return i.group === g; }).map(function (i) { return '<a class="btn small" href="' + i.url + '" target="_blank" rel="noopener noreferrer">' + esc(i.name) + '</a>'; }).join('') + '</div>'; }).join('') + '</section>';
+      ['현금영수증', '카드사', '은행', '체크카드'].map(function (g) { return '<div class="faint" style="margin-top:6px">' + (g === '현금영수증' ? '<b>현금영수증</b> — 홈택스 로그인 → 조회/발급 → 현금영수증 → 현금영수증 조회(사용내역) → 기간(월)을 고르고 엑셀 내려받기' : g === '은행' ? '은행 카드(신용·체크)' : g === '체크카드' ? '인터넷은행·우체국·상호금융 체크카드' : '카드사') + '</div><div class="btns">' + CI.ISSUERS.filter(function (i) { return i.group === g; }).map(function (i) { return '<a class="btn small" href="' + i.url + '" target="_blank" rel="noopener noreferrer">' + esc(i.name) + '</a>'; }).join('') + '</div>'; }).join('') + '</section>';
     var dirBox;
     if (!canWatchDir) dirBox = '<div class="faint">이 브라우저는 폴더 자동 확인을 지원하지 않습니다(휴대폰 등). 휴대폰에서 이 앱을 홈 화면에 설치했다면, 내려받은 파일을 <b>공유 → 연말정산</b>으로 보내면 바로 아래에 미리보기가 나타납니다. 또는 파일 선택을 쓰세요.</div>';
     else if (!ui.dir) dirBox = '<div class="faint">PC에서 한 번만 연결하면, 그 폴더에 저장한 카드내역 파일을 앱이 자동으로 읽습니다. 다운로드 폴더 안에 <b>카드내역</b> 폴더를 만들어 연결하세요(다운로드 폴더 자체는 브라우저가 막습니다). 권한을 물으면 ‘방문할 때마다 허용’을 고르세요.</div><div class="btns"><button class="btn primary" data-action="connect-dir">카드내역 폴더 연결</button></div>';
@@ -363,14 +383,15 @@
       var notes = '';
       if (r.skipped.length) notes += '<div class="faint">이미 추가된 거래라 제외: ' + r.skipped.length + '건</div>';
       if (en.parsed.outOfYear) notes += '<div class="faint">연말정산 연도(' + state.profile.year + ') 밖 거래 제외: ' + en.parsed.outOfYear + '건</div>';
+      if (en.parsed.notDeductible) notes += '<div class="faint">사업자용(지출증빙)·불공제 현금영수증 제외: ' + en.parsed.notDeductible + '건</div>';
       if (r.unmatchedCancels.length) notes += '<div class="faint">원거래가 없는 취소(이미 상계된 것으로 보고 제외): ' + r.unmatchedCancels.map(function (c) { return esc(c.date + ' ' + won(c.amount) + ' ' + c.merchant); }).join(', ') + '</div>';
-      var cardSel = '<label class="full">이 파일의 카드<select data-action="import-card" data-qi="' + qi + '"><option value="">미지정(신용카드·본인으로 처리)</option>' + state.cards.map(function (c) { return '<option value="' + c.id + '"' + (c.id === en.cardId ? ' selected' : '') + '>' + esc(c.alias) + ' (' + esc(c.last4) + ' · ' + esc(L.pm[c.paymentMethod]) + ')</option>'; }).join('') + '</select></label>';
+      var cardSel = '<label class="full">이 파일의 카드<select data-action="import-card" data-qi="' + qi + '"><option value="">미지정(신용카드·본인으로 처리)</option><option value="__cash"' + (en.cardId === '__cash' ? ' selected' : '') + '>현금영수증(국세청 자료)</option>' + state.cards.map(function (c) { return '<option value="' + c.id + '"' + (c.id === en.cardId ? ' selected' : '') + '>' + esc(c.alias) + ' (' + esc(c.last4) + ' · ' + esc(L.pm[c.paymentMethod]) + ')</option>'; }).join('') + '</select></label>';
       return head + '<div class="form">' + cardSel + '</div><div class="faint">사용처 구분을 고치면 다음부터 같은 가맹점에 자동 적용됩니다. 분류가 불확실하면 일반으로 집계되며 ‘확인 필요’가 붙습니다.</div><div class="tbl-wrap"><table><thead><tr><th>일자</th><th class="num">금액</th><th>가맹점</th><th>사용처 구분</th><th>결제수단</th></tr></thead><tbody>' + (rows || '<tr><td colspan="5" class="muted">추가할 건이 없습니다</td></tr>') + '</tbody></table></div>' + notes +
         '<div class="btns"><button class="btn primary" data-action="import-commit" data-qi="' + qi + '"' + (r.added.length ? '' : ' disabled') + '>' + r.added.length + '건 추가</button>' + skipBtn + '</div></section>';
     }).join('');
     var cardRows = state.cards.map(function (c) { return '<tr><td>' + esc(c.alias) + '</td><td>' + esc(c.last4) + '</td><td>' + esc(L.pm[c.paymentMethod]) + '</td><td>' + esc(c.spenderId === 'self' ? '본인' : (state.family.find(function (f) { return f.id === c.spenderId; }) || {}).alias || c.spenderId) + '</td><td><button class="btn small danger" data-action="del-card" data-id="' + c.id + '">삭제</button></td></tr>'; }).join('');
     var cards = '<section class="card"><h3>카드 등록(끝 4자리만 저장)</h3><div class="faint">이용내역 파일에는 신용/체크 구분이 없는 경우가 많아, 등록한 카드로 결제수단과 사용자를 판정합니다. 별명을 카드사 이름(예: 우리카드)으로 하면 파일 이름으로 카드를 자동 선택합니다. 카드번호 전체·비밀번호는 입력하지 마세요.</div><form data-form="card" class="form"><label>별명<input name="alias" required placeholder="예: 우리카드"></label><label>끝 4자리<input name="last4" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" required></label><label>종류<select name="paymentMethod">' + opts({ CREDIT: L.pm.CREDIT, DEBIT: L.pm.DEBIT }, 'CREDIT') + '</select></label><label>사용자<select name="spenderId">' + familyOpts('self') + '</select></label><div class="full btns"><button class="btn primary" type="submit">카드 추가</button></div></form><div class="tbl-wrap"><table><thead><tr><th>별명</th><th>끝4자리</th><th>종류</th><th>사용자</th><th></th></tr></thead><tbody>' + (cardRows || '<tr><td colspan="5" class="muted">등록된 카드 없음(미지정 파일은 신용카드·본인으로 가정하고 확인 필요 표시)</td></tr>') + '</tbody></table></div></section>';
-    return links + upload + queue + cards;
+    return links + upload + queue + monthlyUsage() + cards;
   }
 
   // 급여 화면용: 큰 금액은 '49만 5천원'처럼 읽기 쉽게, 어려운 말 옆 ? 한 줄 풀이
