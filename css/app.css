@@ -152,3 +152,4 @@ details.more>summary{cursor:pointer;color:var(--blue);font-size:14px;padding:4px
 .tabs::-webkit-scrollbar{display:none}
 .add-ded>summary{font-weight:700;color:var(--ink)}
 .form label>span{display:flex;align-items:center;gap:6px}
+.pay-table tfoot td{border-top:2px solid var(--ink);border-bottom:none;background:var(--blue-bg)}
