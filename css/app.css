@@ -116,3 +116,5 @@ details.q summary::-webkit-details-marker{display:none}
 details.q span{position:absolute;z-index:6;left:-8px;top:24px;width:240px;padding:10px;border-radius:10px;background:var(--navy);color:#fff;font-size:12px;font-weight:400;line-height:1.5;box-shadow:0 4px 14px rgba(0,0,0,.2)}
 .form label>span{display:flex;align-items:center;gap:6px}
 .pay-table tfoot td{border-top:2px solid var(--ink);border-bottom:none;background:var(--blue-bg)}
+fieldset.group{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:0;display:grid;gap:8px}
+fieldset.group legend{padding:0 6px;font-weight:700;font-size:14px}
