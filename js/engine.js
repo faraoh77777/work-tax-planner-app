@@ -864,78 +864,6 @@
     return 0;
   }
   /*
-   * 초보자용 '절세 방법' 목록: 지금 입력 상태에서 각각 하나만 더 했을 때 돌려받는 돈(세금 감소, 지방세 포함).
-   * 카드는 사용 순서상 앞 단계를 채운 뒤의 값이다. conditional = 요건(무주택·부양 등)이 맞을 때만, info = 금액 없는 안내.
-   * allSaving = 조건 없는 항목을 모두 했을 때 함께 줄어드는 세금(겹침 반영).
-   */
-  function buildTips(state, rules) {
-    var base = calc(state, rules); if (base.blocked) return null;
-    var gross = base.gross, year = state.profile.year, sc = state.profile.selfConditions || {}, inp = collectDeductionInputs(state);
-    var plan = buildOptimalPlan(state, rules), st = plan.stages, tips = [];
-    var homeless = sc.isHomeless === true && sc.isHouseholdHead === true;
-    function taxWith(extraDeds, extraFam, extraExp) {
-      var s2 = Object.assign({}, state, { deductions: (state.deductions || []).concat(extraDeds || []), family: (state.family || []).concat(extraFam || []) });
-      return calc(s2, rules, { extraExpenses: extraExp || [] }).totalTax;
-    }
-    function ent(cat, amount, meta) { return { id: 'tip-' + cat, category: cat, amount: amount, beneficiaryId: 'self', meta: meta || {} }; }
-    var s1 = st[0], s2b = st[1], s3 = st[2];
-    if (s1.need + s2b.need > 0 && s2b.taxSaving > 0) tips.push({ key: 'CARD_BASIC', title: '체크카드·현금영수증 쓰기', saving: s2b.taxSaving, amount: s1.need + s2b.need,
-      action: (s1.need > 0 ? '카드를 ' + won0(s1.need) + ' 더 쓴 뒤(아무 카드나), ' : '') + '체크카드·현금영수증으로 ' + won0(s2b.need) + ' 더 쓰기',
-      detail: ['카드 공제는 연봉의 25%(' + won0(s1.target) + ')를 넘게 쓴 금액부터 시작돼요.', '그 뒤로는 신용카드(15%)보다 체크카드·현금영수증(30%)이 두 배 유리해요.', '어차피 쓸 돈의 결제수단만 바꾸는 거예요. 지출을 늘리라는 뜻이 아니에요.'] });
-    if (s3.need > 0 && s3.taxSaving > 0) tips.push({ key: 'CARD_EXTRA', title: '전통시장·대중교통 이용', saving: s3.taxSaving, amount: s3.need,
-      action: '전통시장·버스·지하철에서 ' + won0(s3.need) + ' 쓰기',
-      detail: ['전통시장·대중교통은 40%로 가장 높게 공제되고, 카드 공제 한도와 별도로 ' + won0(s3.target) + '까지 더 받을 수 있어요.', '온누리상품권 결제·교통카드 충전도 포함돼요.'] });
-    var pa = rules.pensionAccount, curP = sumAmt(inp.PENSION_SAVING) + sumAmt(inp.IRP), addP = Math.max(0, pa.totalCap - curP);
-    if (addP > 0) {
-      var addS = Math.max(0, Math.min(pa.savingCap - sumAmt(inp.PENSION_SAVING), addP)), addI = addP - addS;
-      var pr = gross <= pa.grossThreshold ? pa.rateLow : pa.rateHigh;
-      tips.push({ key: 'PENSION', title: '연금저축·IRP 넣기', saving: base.totalTax - taxWith([ent('PENSION_SAVING', addS), ent('IRP', addI)]), amount: addP,
-        action: '연금저축' + (addI > 0 ? '·IRP' : '') + '에 ' + won0(addP) + ' 넣기',
-        detail: ['넣은 돈의 ' + pctText(pr) + '를 세금에서 바로 빼줘요(연 ' + won0(pa.totalCap) + '까지, 연금저축은 ' + won0(pa.savingCap) + '까지).', '쓰는 돈이 아니라 노후 저축이에요. 55세 전에 찾으면 받은 혜택을 돌려내야 해요.'] });
-    }
-    var dh = rules.donation.hometown, addH = Math.max(0, dh.lowCap - sumAmt(inp.DONATION_HOMETOWN));
-    if (addH > 0) tips.push({ key: 'HOMETOWN', title: '고향사랑기부', saving: base.totalTax - taxWith([ent('DONATION_HOMETOWN', addH)]), amount: addH,
-      action: '고향사랑기부 ' + won0(addH) + ' 하기', detail: ['10만원까지는 거의 전액을 돌려받고, 기부액의 30% 상당 답례품(지역 특산품)도 받아요.', '고향사랑e음 누리집이나 은행 앱에서 할 수 있어요.'] });
-    var ins = rules.insurance, addIns = Math.max(0, ins.cap - sumAmt(inp.INSURANCE));
-    if (addIns > 0) tips.push({ key: 'INSURANCE', title: '보장성 보험료 입력', saving: base.totalTax - taxWith([ent('INSURANCE', addIns)]), amount: addIns,
-      action: '실손·자동차·종신 보험료 ' + won0(addIns) + '까지 입력', detail: ['이미 내고 있는 보험료라면 입력만 하면 돼요(연 ' + won0(ins.cap) + '까지 ' + pctText(ins.rate) + ').', '홈택스 연말정산 간소화에서 금액을 확인할 수 있어요.'], link: '#/deductions' });
-    var hs = rules.housing.subscription, addSub = Math.max(0, hs.annualPayCap - sumAmt(inp.HOUSING_SUBSCRIPTION));
-    if (gross <= hs.grossCap && addSub > 0) {
-      var subSave = base.totalTax - calc(Object.assign({}, state, { deductions: (state.deductions || []).concat([ent('HOUSING_SUBSCRIPTION', addSub)]), profile: Object.assign({}, state.profile, { selfConditions: Object.assign({}, sc, { isHomeless: true, isHouseholdHead: true }) }) }), rules).totalTax;
-      tips.push({ key: 'SUBSCRIPTION', title: '주택청약 넣기', saving: subSave, amount: addSub, conditional: !homeless, condition: '무주택 세대주일 때',
-        action: '주택청약종합저축에 ' + won0(addSub) + ' 넣기', detail: ['넣은 돈의 40%를 소득에서 빼줘요(연 ' + won0(hs.annualPayCap) + '까지).', '무주택 세대주만 받을 수 있어요. 은행에 "무주택 확인서"를 내야 해요.'] });
-    }
-    var rt = rules.rent;
-    if (gross <= rt.grossCap && sumAmt(inp.RENT_CREDIT) === 0) {
-      var rentEx = 6000000;
-      var rentSave = base.totalTax - calc(Object.assign({}, state, { deductions: (state.deductions || []).concat([ent('RENT_CREDIT', rentEx)]), profile: Object.assign({}, state.profile, { selfConditions: Object.assign({}, sc, { isHomeless: true, isHouseholdHead: true }) }) }), rules).totalTax;
-      tips.push({ key: 'RENT', title: '월세 세액공제', saving: rentSave, amount: rentEx, conditional: true, condition: '월세 사는 무주택 세대주일 때(월 50만원 예시)',
-        action: '내고 있는 월세 입력하기', detail: ['낸 월세의 ' + pctText(gross <= rt.lowGrossCap ? rt.lowRate : rt.rate) + '를 돌려받아요(연 ' + won0(rt.rentCap) + '까지).', '전입신고가 되어 있어야 하고, 계약서·이체내역이 필요해요.'], link: '#/deductions' });
-    }
-    if (!(state.family || []).some(function (f) { return f.relation === 'LINEAL_ASCENDANT'; })) {
-      var parent = { id: 'tip-parent', relation: 'LINEAL_ASCENDANT', birthYear: year - 65, incomeUnderLimit: true };
-      tips.push({ key: 'PARENT', title: '부모님 부양가족 등록', saving: base.totalTax - taxWith(null, [parent]), conditional: true, condition: '60세 이상, 소득이 거의 없는 부모님을 모실 때(1명)',
-        action: '부모님을 가족으로 등록하기', detail: ['1명당 연 150만원을 소득에서 빼줘요(70세 이상이면 100만원 더).', '따로 사셔도 실제로 생활비를 드리면 될 수 있어요. 형제 중 한 명만 받을 수 있어요.'], link: '#/settings' });
-    }
-    var med = base.medical;
-    if (med.belowThreshold) tips.push({ key: 'MEDICAL', title: '의료비', saving: null, info: true, action: '의료비가 ' + won0(med.threshold) + '을 넘으면 넘는 금액의 15%를 돌려받아요',
-      detail: ['연봉의 3%(' + won0(med.threshold) + ')가 기준이에요. 지금까지 ' + won0(med.total) + ' 입력했어요.', '가족 의료비를 한 사람(소득 높은 사람)에게 모으면 유리해요.'], link: '#/deductions' });
-    var actionable = tips.filter(function (t) { return !t.conditional && !t.info && t.saving > 0; }).sort(function (a, b) { return b.saving - a.saving; });
-    // 전통시장·대중교통 혜택은 체크카드 단계를 채운 뒤의 값이라 순서를 뒤로
-    var ib = actionable.findIndex(function (t) { return t.key === 'CARD_BASIC'; }), ie = actionable.findIndex(function (t) { return t.key === 'CARD_EXTRA'; });
-    if (ib >= 0 && ie >= 0 && ie < ib) { var ex = actionable.splice(ie, 1)[0]; actionable.splice(ib, 0, ex); } // 빼낸 뒤 체크카드는 ib-1 → 그 바로 뒤
-    var conditional = tips.filter(function (t) { return t.conditional && t.saving > 0; }).sort(function (a, b) { return b.saving - a.saving; });
-    var info = tips.filter(function (t) { return t.info; });
-    // 조건 없는 항목을 모두 했을 때(겹침 반영): 카드 3단계 + 연금 + 기부 + 보험
-    var allDeds = [];
-    actionable.forEach(function (t) { if (t.key === 'PENSION') { var s = Math.max(0, Math.min(pa.savingCap - sumAmt(inp.PENSION_SAVING), addP)); allDeds.push(ent('PENSION_SAVING', s), ent('IRP', addP - s)); } if (t.key === 'HOMETOWN') allDeds.push(ent('DONATION_HOMETOWN', addH)); if (t.key === 'INSURANCE') allDeds.push(ent('INSURANCE', addIns)); });
-    var cardExtras = actionable.some(function (t) { return t.key === 'CARD_BASIC' || t.key === 'CARD_EXTRA'; }) ? plan.extras : [];
-    var allTax = taxWith(allDeds, null, cardExtras);
-    return { baseTax: base.totalTax, settlement: base.settlement, withheld: base.withheld, gross: gross, base: base, plan: plan,
-      tips: actionable.concat(conditional).concat(info), top: actionable.slice(0, 3), allSaving: Math.max(0, base.totalTax - allTax), afterTax: allTax };
-  }
-
-  /*
    * 공제 관리 화면의 항목별 예상 세제혜택: 그 항목만 뺐을 때 늘어나는 세금(소득세+지방세).
    * 각 항목을 나머지가 모두 있는 상태에서 뺀 값이라 항목 합이 전체와 다를 수 있다(표준세액공제 전환·결정세액 한도 때문).
    * 근로소득·표준·자녀 세액공제처럼 뺄 수 없는 자동 항목은 적용액 × (1 + 지방세율) 추정.
@@ -1107,6 +1035,6 @@
     estimatePremiums: estimatePremiums, mergePremiums: mergePremiums, grossFromState: grossFromState, employmentRange: employmentRange, monthsInRange: monthsInRange,
     earnedIncomeDeduction: earnedIncomeDeduction, calculatedTax: calculatedTax, earnedIncomeTaxCredit: earnedIncomeTaxCredit,
     medicalCredit: medicalCredit, educationCredit: educationCredit, donationCredits: donationCredits, pensionCredit: pensionCredit, rentCredit: rentCredit,
-    collectDeductionInputs: collectDeductionInputs, buildOptimalPlan: buildOptimalPlan, buildPlanSummary: buildPlanSummary, buildTaxDesign: buildTaxDesign, itemTaxSavings: itemTaxSavings, buildTips: buildTips, DESIGN_GROUPS: DESIGN_GROUPS, mkExtra: mkExtra, classifyExpense: classifyExpense
+    collectDeductionInputs: collectDeductionInputs, buildOptimalPlan: buildOptimalPlan, buildPlanSummary: buildPlanSummary, buildTaxDesign: buildTaxDesign, itemTaxSavings: itemTaxSavings, DESIGN_GROUPS: DESIGN_GROUPS, mkExtra: mkExtra, classifyExpense: classifyExpense
   };
 });

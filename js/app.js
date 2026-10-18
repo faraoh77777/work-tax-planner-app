@@ -5,7 +5,7 @@
   var RULES = globalThis.TaxRules || {};
   var app = document.getElementById('app');
   var state = null;
-  var ui = { inputTab: 'cards', expenseMonth: '', editingExpense: null, editingRecurring: null, editingPayroll: null, confirm: null, dedCategory: 'MEDICAL', editingFamily: null, restorePending: null, lastOpt: null, importQueue: [], dir: null };
+  var ui = { inputTab: 'payroll', expenseMonth: '', editingExpense: null, editingRecurring: null, editingPayroll: null, confirm: null, dedCategory: 'MEDICAL', editingFamily: null, restorePending: null, lastOpt: null, importQueue: [], dir: null };
 
   // ---------- 라벨 ----------
   var L = {
@@ -56,16 +56,14 @@
   }
 
   // ---------- 셸 ----------
-  var NAV = [['#/home', '홈', '⌂'], ['#/tips', '절세 방법', '★'], ['#/input', '입력', '✎']];
-  // 하위 화면이 어느 메뉴에 속하는지(메뉴 강조용)
-  var NAV_OF = { '#/plan': '#/tips', '#/maximize': '#/tips', '#/design': '#/tips', '#/basis': '#/tips', '#/detail': '#/home', '#/deductions': '#/input' };
+  var NAV = [['#/plan', '플랜', '◎'], ['#/home', '홈', '⌂'], ['#/input', '입력', '✎'], ['#/deductions', '공제', '☑'], ['#/design', '설계', '▥'], ['#/settings', '설정', '⚙']];
   function shell(title, body, extraBadges, hideNav) {
     var rp = rules();
-    var badges = extraBadges || '';
-    var cur = (location.hash || '#/home').split(/[?/]/).slice(0, 2).join('/');
-    cur = NAV_OF[cur] || cur;
+    var badges = badge(state.profile.year + '년 귀속', 'navy') + (rp ? badge('규칙팩 ' + rp.version + ' · ' + L.level[rp.verificationLevel], rp.verificationLevel === 'CASE_VERIFIED' ? 'green' : 'amber') : badge('규칙팩 없음(미지원)', 'red')) + badge('기준월 ' + state.profile.referenceMonth.slice(5) + '월') + (extraBadges || '');
+    var cur = (location.hash || '#/plan').split(/[?/]/).slice(0, 2).join('/');
+    if (cur === '#/maximize') cur = '#/plan';
     var nav = hideNav ? '' : '<nav class="bottom" aria-label="주 메뉴">' + NAV.map(function (n) { return '<a href="' + n[0] + '" class="' + (cur === n[0] ? 'on' : '') + '"><span class="ico" aria-hidden="true">' + n[2] + '</span>' + n[1] + '</a>'; }).join('') + '</nav>';
-    app.innerHTML = '<header class="top"><div class="row-between"><h1>' + esc(title) + '</h1>' + (hideNav ? (hideNav === 'start' ? '' : '<a class="btn small" href="#/settings">← 뒤로</a>') : (location.hash.indexOf('#/settings') === 0 ? '<a class="btn small" href="#/home">← 홈</a>' : '<a class="btn small gear" href="#/settings" aria-label="설정">⚙ 설정</a>')) + '</div>' + (badges ? '<div class="badges">' + badges + '</div>' : '') + '<div class="year-chip">' + state.profile.year + '년 연말정산</div></header><main>' + body + '</main>' + nav;
+    app.innerHTML = '<header class="top"><div class="row-between"><h1>' + esc(title) + '</h1>' + (hideNav ? '<a class="btn small" href="#/settings">← 뒤로</a>' : '<a class="btn small" href="#/settings" aria-label="설정">설정</a>') + '</div><div class="badges">' + badges + '</div></header><main>' + body + '</main>' + nav;
   }
 
   // ---------- S00 플랜 ----------
@@ -209,127 +207,43 @@
   function saveScenario() { var y = window.scrollY; return persist().then(function () { render(); window.scrollTo(0, y); }); }
   function scenarioItem(key) { state.scenario.items = state.scenario.items || {}; return (state.scenario.items[key] = state.scenario.items[key] || {}); }
 
-  // ---------- 초보자용 공통 ----------
-  // 큰 금액은 '49만 5천원'처럼 읽기 쉽게(정확한 원 단위는 자세히 화면에서)
-  function wonS(n) {
-    if (n === null || n === undefined || isNaN(n)) return '—';
-    n = Math.round(n); var neg = n < 0; n = Math.abs(n); var s;
-    if (n >= 100000000) { var eok = Math.floor(n / 1e8), man0 = Math.round((n % 1e8) / 1e4); s = eok + '억' + (man0 ? ' ' + man0.toLocaleString('ko-KR') + '만' : '') + '원'; }
-    else if (n >= 10000) { var man = Math.floor(n / 10000), cheon = Math.round((n % 10000) / 1000); if (cheon === 10) { man++; cheon = 0; } s = man.toLocaleString('ko-KR') + '만' + (cheon ? ' ' + cheon + '천' : '') + '원'; }
-    else s = n.toLocaleString('ko-KR') + '원';
-    return (neg ? '-' : '') + s;
-  }
-  // 어려운 말 한 줄 풀이: 용어 옆 ? 를 누르면 펼쳐진다
-  var GLOSSARY = {
-    연봉: '세금 떼기 전 1년 급여(상여 포함)예요. 식대 같은 비과세는 빼고 계산해요.',
-    비과세: '세금을 안 매기는 급여예요. 대표적으로 식대 월 20만원까지.',
-    원천징수: '회사가 매달 월급에서 미리 떼어 낸 세금이에요. 급여명세서의 "소득세"·"지방소득세" 칸이에요.',
-    환급: '미리 낸 세금이 실제 세금보다 많으면 2월 월급에서 돌려받아요.',
-    세대주: '주민등록등본 맨 위에 이름이 있는 사람이에요.',
-    무주택: '세대원 모두 집을 갖고 있지 않은 상태예요.',
-    시작선: '카드 공제는 연봉의 25%를 넘게 쓴 금액부터 시작돼요. 그 전까지는 어떤 카드로 써도 공제가 0이에요.',
-    공제: '소득공제는 세금 매기는 소득을 줄여주고, 세액공제는 세금에서 바로 빼줘요. 이 앱은 결과(돌려받는 돈)로 바꿔 보여드려요.'
-  };
-  function q(term) { return GLOSSARY[term] ? '<details class="q"><summary aria-label="' + esc(term) + ' 설명">?</summary><span>' + esc(GLOSSARY[term]) + '</span></details>' : ''; }
-  // 입력 메뉴의 탭(공제 영수증은 공제 관리 화면)
-  function inputTabs(on) {
-    return '<div class="tabs">' + [['cards', '카드', '#/input/cards'], ['ded', '공제', '#/deductions'], ['payroll', '급여', '#/input/payroll'], ['expenses', '지출', '#/input/expenses'], ['recurring', '매달 고정', '#/input/recurring']].map(function (t) { return '<a class="btn' + (on === t[0] ? ' on' : '') + '" href="' + t[2] + '">' + t[1] + '</a>'; }).join('') + '</div>';
-  }
-  function moreLinks(list) { return '<details class="more"><summary>더 자세히 보기</summary><div class="more-links">' + list.map(function (l) { return '<a href="' + l[0] + '">' + esc(l[1]) + ' ›</a>'; }).join('') + '</div></details>'; }
-
-  // ---------- 처음 시작: 질문 3개 ----------
-  function viewStart() {
-    var p = state.profile, sc = p.selfConditions || {}, rp = rules();
-    var famDone = (state.family || []).length > 0;
-    var cnt = function (name, label) { return '<label>' + label + '<select name="' + name + '">' + [0, 1, 2, 3, 4].map(function (n) { return '<option value="' + n + '">' + n + '명</option>'; }).join('') + '</select></label>'; };
-    var house = function (v, label, sub) { return '<label class="choice"><input type="radio" name="house" value="' + v + '"' + (v === 'JEONSE' ? ' checked' : '') + '><span><b>' + label + '</b>' + (sub ? '<small>' + sub + '</small>' : '') + '</span></label>'; };
-    var body = '<section class="card hero-start"><h2>3가지만 알려주세요</h2><p class="muted" style="margin:0">1분이면 올해 돌려받을 돈과 더 받는 방법을 알려드려요. 입력값은 이 기기에만 저장돼요.</p></section>' +
-      '<form data-form="start" class="start">' +
-      '<section class="card"><h3><span class="stepn">1</span>연봉은 얼마예요? ' + q('연봉') + '</h3><div class="form"><label class="full">세전 연봉(원)<input name="gross" inputmode="numeric" required placeholder="예: 45,000,000" value="' + (p.expectedGrossAnnual ? p.expectedGrossAnnual.toLocaleString('ko-KR') : '') + '"></label><label class="row full"><input type="checkbox" name="meal"' + (p.expectedNonTaxable >= 2400000 ? ' checked' : '') + '>식대를 받아요(월 20만원 비과세) ' + q('비과세') + '</label></div></section>' +
-      '<section class="card"><h3><span class="stepn">2</span>함께 사는(부양하는) 가족은요?</h3>' + (famDone ? '<p class="muted">가족 ' + state.family.length + '명이 이미 등록되어 있어요. 고치려면 설정에서 바꿔 주세요.</p>' :
-        '<div class="form"><label class="full">배우자<select name="spouse"><option value="NONE">없음</option><option value="NOINCOME">있음 — 소득이 거의 없어요</option><option value="INCOME">있음 — 맞벌이예요</option></select></label>' + cnt('kidsSchool', '8~20세 자녀') + cnt('kidsYoung', '7세 이하 자녀') + cnt('parents', '모시는 부모님(60세 이상, 소득 거의 없음)') + '</div><div class="faint">소득이 거의 없다 = 1년 소득 100만원 이하(근로소득만 있으면 연봉 500만원 이하).</div>') + '</section>' +
-      '<section class="card"><h3><span class="stepn">3</span>지금 사는 집은요?</h3><div class="choices">' + house('OWN', '내 집', '대출 없음') + house('OWN_LOAN', '내 집', '주택담보대출 있음') + house('JEONSE', '전세') + house('MONTHLY', '월세') + house('PARENTS', '부모님 집 등', '내가 세대주가 아님') + '</div>' +
-      '<label class="row" style="margin-top:8px"><input type="checkbox" name="head" checked>내가 세대주예요 ' + q('세대주') + '</label>' +
-      '<div class="form"><label>월세(월, 월세일 때)<input name="rent" inputmode="numeric" placeholder="예: 500,000"></label><label>올해 낸 대출 이자(대출 있을 때, 대략)<input name="interest" inputmode="numeric" placeholder="예: 6,000,000"></label>' +
-      (rp ? '<label class="full">대출 조건(대출 있을 때)<select name="loanCap"><option value="">모르겠어요(나중에)</option>' + rp.housing.mortgageInterest.capOptions.map(function (o) { return '<option value="' + o.key + '">' + esc(o.label) + '</option>'; }).join('') + '</select></label>' : '') + '</div></section>' +
-      '<div class="btns"><button class="btn primary big" type="submit">결과 보기</button>' + (p.expectedGrossAnnual ? '<a class="btn" href="#/home">건너뛰기</a>' : '<button class="btn" type="button" data-action="demo">예시로 둘러보기</button>') + '</div></form>';
-    shell('연말정산 미리보기', body, null, 'start');
-  }
-  function submitStart(form, d) {
-    var gross = num(d.gross); if (!gross || gross <= 0) return toast('연봉을 숫자로 입력하세요', true);
-    var y = state.profile.year, sc = Object.assign({}, state.profile.selfConditions);
-    state.profile.expectedGrossAnnual = gross; state.profile.expectedNonTaxable = checked(form, 'meal') ? 2400000 : 0; state.profile.salaryForecastMode = 'FIXED';
-    if (!state.family.length) {
-      var add = function (rel, alias, by, inc) { state.family.push({ id: uid(), alias: alias, relation: rel, birthYear: by, incomeUnderLimit: inc, cohabiting: true }); };
-      if (d.spouse !== 'NONE') add('SPOUSE', '배우자', y - 35, d.spouse === 'NOINCOME');
-      for (var i = 0; i < num(d.kidsSchool); i++) add('LINEAL_DESCENDANT', '자녀' + (i + 1), y - 12, true);
-      for (var j = 0; j < num(d.kidsYoung); j++) add('LINEAL_DESCENDANT', '어린 자녀' + (j + 1), y - 4, true);
-      for (var k = 0; k < num(d.parents); k++) add('LINEAL_ASCENDANT', '부모님' + (k + 1), y - 65, true);
-    }
-    var h = d.house, owns = h === 'OWN' || h === 'OWN_LOAN';
-    sc.isHomeless = !owns; sc.isHouseholdHead = h === 'PARENTS' ? false : checked(form, 'head');
-    state.profile.selfConditions = sc;
-    state.deductions = (state.deductions || []).filter(function (x) { return x.id !== 'start-rent' && x.id !== 'start-mortgage'; });
-    if (h === 'MONTHLY' && num(d.rent) > 0) state.deductions.push({ id: 'start-rent', category: 'RENT_CREDIT', amount: num(d.rent) * 12, beneficiaryId: 'self', meta: {} });
-    if (h === 'OWN_LOAN') { if (d.loanCap) state.profile.mortgageCapKey = d.loanCap; if (num(d.interest) > 0) state.deductions.push({ id: 'start-mortgage', category: 'MORTGAGE_INTEREST', amount: num(d.interest), beneficiaryId: 'self', meta: {} }); }
-    state.onboarded = true;
-    persist().then(function () { toast('저장했어요. 결과를 보여드릴게요'); go('#/home'); });
-  }
-
-  // ---------- 홈: 큰 숫자 하나 + 이것만 하면 TOP 3 ----------
-  function tipRow(t, compact) {
-    return '<details class="tip"' + (compact ? '' : '') + '><summary><div class="tip-main"><b>' + esc(t.title) + '</b>' + (t.conditional ? ' ' + badge(t.condition, 'amber') : '') + '<span>' + esc(t.action) + '</span></div><b class="tip-amt">' + (t.saving > 0 ? '+' + wonS(t.saving) : '') + '</b></summary>' +
-      '<div class="tip-body">' + t.detail.map(function (l) { return '<p>' + esc(l) + '</p>'; }).join('') + (t.link ? '<a class="btn small" href="' + t.link + '">입력하러 가기 ›</a>' : '') + '</div></details>';
-  }
+  // ---------- S01 홈 ----------
   function viewHome() {
     var rp = rules();
-    if (!rp) return shell('내 연말정산', '<div class="err">' + state.profile.year + '년 계산 기준이 없어요. 설정에서 연도를 바꿔 주세요.</div>');
-    if (E.grossFromState(state).gross === null) return viewStart();
-    var t = E.buildTips(state, rp), b = t.base;
-    var hero;
-    if (t.settlement !== null) {
-      var refund = t.settlement < 0;
-      hero = '<section class="card hero"><div class="muted">올해 연말정산 예상</div><div class="hero-num ' + (refund ? 'pos' : 'neg') + '">' + (refund ? '돌려받을 돈 ' : '더 낼 돈 ') + wonS(Math.abs(t.settlement)) + '</div><div class="faint">미리 낸 세금 ' + wonS(b.withheld.income + b.withheld.local) + ' − 실제 세금 ' + wonS(t.baseTax) + ' ' + q('환급') + '</div></section>';
-    } else {
-      hero = '<section class="card hero"><div class="muted">지금 상태로 올해 낼 세금(예상)</div><div class="hero-num">' + wonS(t.baseTax) + '</div><div class="faint">급여명세서의 원천징수 세액을 넣으면 <b>돌려받을 돈</b>을 알려드려요 ' + q('원천징수') + '</div><a class="btn small" href="#/input/payroll">급여명세서 입력 ›</a></section>';
+    if (!rp) return shell('연말정산 카드공제 계산기', '<div class="err">규칙팩 없음</div>');
+    var r = E.calc(state, rp);
+    var body = '';
+    if (r.blocked) {
+      body += '<section class="card"><h3>시작하기</h3><p class="muted">총급여가 없어 계산을 보류했습니다: ' + esc(r.missingFields.join(', ')) + '</p><div class="btns"><a class="btn primary" href="#/plan">총급여 입력하고 플랜 보기</a><a class="btn" href="#/settings">설정</a><button class="btn" data-action="demo">예시 데이터 불러오기</button></div></section>';
+      return shell('연말정산 카드공제 계산기', body);
     }
-    var top = t.top.length ? '<section class="card"><div class="row-between"><h3>이것만 하면 더 돌려받아요</h3></div>' + t.top.map(function (x) { return tipRow(x); }).join('') +
-      '<p class="faint" style="margin:6px 0 0">금액은 하나씩 했을 때 기준이에요. 함께 하면 겹치는 부분이 있어요.</p><div class="all-save">모두 하면 최대 <b>' + wonS(t.allSaving) + '</b> 더 돌려받아요' + (t.afterTax === 0 ? '<br><span class="faint">낼 세금이 0원이 돼요</span>' : '') + '</div><a class="btn primary" href="#/tips">절세 방법 전부 보기 ›</a></section>'
-      : '<section class="card"><h3>할 수 있는 건 다 했어요 👍</h3><p class="muted">더 줄일 세금이 거의 없어요. 해당되는지 확인할 항목은 절세 방법에서 볼 수 있어요.</p><a class="btn" href="#/tips">절세 방법 보기 ›</a></section>';
-    var c = b.card, cardBox;
-    if (!c.eligible) cardBox = '<div class="kv"><span>카드 공제 시작선까지 ' + q('시작선') + '</span><b>' + wonS(Math.max(0, c.minUse - c.total)) + ' 남음</b></div>' + bar(c.minUse ? c.total / c.minUse : 0) + '<div class="faint">연봉의 25%(' + wonS(c.minUse) + ')까지는 어떤 카드로 써도 같아요.</div>';
-    else cardBox = '<div class="kv"><span>카드로 받는 공제</span><b>' + wonS(c.total_deduction) + '</b></div>' + bar((c.general + c.extra) / (c.basicLimit + c.extraLimit), true) + '<div class="faint">한도 ' + wonS(c.basicLimit + c.extraLimit) + ' 중 ' + wonS(c.general + c.extra) + ' 채웠어요.</div>';
-    var cardSec = '<section class="card"><div class="row-between"><h3>올해 카드 사용 ' + wonS(c.total) + '</h3><a class="faint" href="#/input/cards">내역 올리기 ›</a></div>' + cardBox + '</section>';
-    var issues = b.missingFields.concat(b.warnings);
-    var checks = issues.length ? '<details class="card checks"><summary>확인할 것 ' + issues.length + '개</summary>' + issues.map(function (w) { return '<p class="faint">· ' + esc(w) + '</p>'; }).join('') + '</details>' : '';
-    shell('내 연말정산', hero + top + cardSec + checks + moreLinks([['#/detail', '세금 계산 과정'], ['#/deductions', '공제 항목별 금액'], ['#/plan', '카드 사용 순서'], ['#/start', '처음 질문 다시 하기']]));
-  }
-
-  // ---------- 절세 방법: 돌려받는 돈 큰 순서 ----------
-  function viewTips() {
-    var rp = rules();
-    if (!rp || E.grossFromState(state).gross === null) return viewStart();
-    var t = E.buildTips(state, rp);
-    var act = t.tips.filter(function (x) { return !x.conditional && !x.info; }), cond = t.tips.filter(function (x) { return x.conditional; }), info = t.tips.filter(function (x) { return x.info; });
-    // 어떤 연봉으로 계산했는지 맨 위에(연봉이 바뀌면 한도·요율이 달라짐)
-    var pf = state.profile, nt = pf.expectedNonTaxable || 0;
-    var basis = '<div class="basis-line"><div><div>' + (pf.salaryForecastMode === 'MONTHLY' ? '월별 급여 합계 <b>' + wonS(t.gross) + '</b> 기준' : '연봉 <b>' + wonS(pf.expectedGrossAnnual) + '</b> 기준') + '</div>' + (nt && pf.salaryForecastMode !== 'MONTHLY' ? '<div class="faint">비과세 ' + wonS(nt) + ' 빼고 ' + wonS(t.gross) + '으로 계산</div>' : '') + '</div><a class="btn small" href="#/settings">바꾸기</a></div>';
-    var head = basis + '<section class="card hero"><div class="muted">아래를 모두 하면</div><div class="hero-num pos">최대 ' + wonS(t.allSaving) + ' 더</div><div class="faint">세금 ' + wonS(t.baseTax) + ' → ' + wonS(t.afterTax) + ' · 줄을 누르면 방법이 나와요</div></section>';
-    var sec = function (title, list, note) { return list.length ? '<section class="card"><h3>' + title + '</h3>' + (note ? '<p class="faint" style="margin:0 0 4px">' + note + '</p>' : '') + list.map(function (x) { return tipRow(x); }).join('') + '</section>' : ''; };
-    var body = head + sec('지금 할 수 있는 것', act) + sec('해당되면 받을 수 있는 것', cond, '조건이 맞을 때만 받을 수 있어요. 금액은 예상이에요.') + sec('알아두면 좋은 것', info);
-    shell('절세 방법', body + moreLinks([['#/maximize', '직접 조합해 보기(모든 항목·부양가족)'], ['#/plan', '카드 사용 순서 자세히'], ['#/design', '남은 생활비 나눠 쓰기'], ['#/basis', '계산 기준과 출처']]));
+    var gi = r.grossInfo;
+    body += '<section class="card"><div class="row-between"><h2>예상 총급여(비과세 제외)</h2><span class="muted">' + (gi.mode === 'MONTHLY' ? '월별 추정 방식' : '예상연봉 고정 방식') + '</span></div><div class="big">' + won(r.gross) + '</div>' + (gi.mode === 'MONTHLY' ? '<div class="grid2"><div><div class="muted">실제 입력</div><b>' + won(gi.actual) + '</b></div><div><div class="muted">예상</div><b>' + won(gi.forecast) + '</b></div></div>' : '') + '</section>';
+    var c = r.card;
+    body += '<section class="card"><div class="row-between"><h2>카드 등 사용액(공제대상, 본인' + (c.familyIncluded.length ? '+가족 ' + c.familyIncluded.length + '명' : '') + ')</h2>' + (c.eligible ? badge('최저사용액 도달', 'green') : badge('최저사용액 미달', 'amber')) + '</div><div class="mid">' + won(c.total) + '</div>' +
+      '<div class="kv muted"><span>최저사용액 ' + won(c.minUse) + '(총급여 25%)</span><span>' + (c.minUse ? pct(c.total / c.minUse) : '-') + '</span></div>' + bar(c.minUse ? c.total / c.minUse : 0, true) +
+      '<div class="kv muted"><span>기본한도 ' + won(c.basicLimit) + ' 중 공제 ' + won(c.general) + '</span><span>' + pct(c.general / c.basicLimit) + '</span></div>' + bar(c.general / c.basicLimit) +
+      '<div class="kv muted"><span>추가한도 ' + won(c.extraLimit) + ' 중 공제 ' + won(c.extra) + '</span><span>' + pct(c.extra / c.extraLimit) + '</span></div>' + bar(c.extra / c.extraLimit) +
+      '<div class="kv"><span>카드 소득공제(현재)</span><b>' + won(c.total_deduction) + '</b></div>' + (Object.keys(c.bySpender).length > 1 ? '<details><summary>사용자별 분리 집계</summary>' + Object.keys(c.bySpender).map(function (k) { var f = state.family.find(function (x) { return x.id === k; }); return '<div class="kv muted"><span>' + esc(k === 'self' ? '본인' : (f ? f.alias || L.rel[f.relation] : k)) + '</span><span>' + won(c.bySpender[k].total) + (k !== 'self' && c.familyIncluded.indexOf(k) < 0 ? ' · 분리(본인 공제에 넣지 않음)' : '') + '</span></div>'; }).join('') + '</details>' : '') + '<a href="#/detail">정산 상세 보기 ›</a></section>';
+    var plan = E.buildOptimalPlan(state, rp);
+    var next = plan.stages.filter(function (s) { return s.need > 0; })[0];
+    body += '<section class="card dark"><h2>권장 행동</h2>' + (next ? '<p style="margin:0">다음 단계 <b>' + esc(next.label) + '</b>: ' + esc(next.method) + '로 <b>' + won(next.need) + '</b> 더 쓰면 ' + (next.key === 'THRESHOLD' ? '공제 구간에 들어갑니다' : '소득공제 ' + won(next.deduction) + ', 절세 약 ' + won(next.taxSaving)) + '.</p>' : '<p style="margin:0">카드 한도를 모두 채웠습니다. 추가 카드 사용은 공제가 없습니다.</p>') + '<div class="btns"><a class="btn" style="background:#fff" href="#/plan">플랜 전체 보기</a><a class="btn" style="background:#fff" href="#/design">배분안 비교</a></div></section>';
+    body += '<section class="card"><div class="row-between"><h2>예상 정산</h2>' + badge(r.standardChoice === 'STANDARD' ? '표준세액공제 적용' : '특별공제 적용', 'gray') + '</div><div class="grid2"><div><div class="muted">결정세액+지방소득세</div><b>' + won(r.totalTax) + '</b></div><div><div class="muted">정산액</div><b>' + (r.settlement === null ? '보류(기납부 미입력)' : (r.settlement < 0 ? '환급 예상 ' + won(-r.settlement) : '추가 납부 예상 ' + won(r.settlement))) + '</b></div></div><div class="faint">확정값이 아닌 예상치입니다.</div></section>';
+    var issues = r.missingFields.concat(r.warnings);
+    if (issues.length) body += '<section class="warn"><b>확인 ' + issues.length + '건</b>' + issues.map(function (w) { return '<span>· ' + esc(w) + '</span>'; }).join('') + '<a href="#/input">입력하러 가기 ›</a></section>';
+    shell('연말정산 카드공제 계산기', body);
   }
 
   // ---------- S02 입력 ----------
   function viewInput(sub) {
-    ui.inputTab = (sub === 'sms' ? 'cards' : sub) || ui.inputTab || 'cards';
-    var tabs = inputTabs(ui.inputTab);
+    ui.inputTab = (sub === 'sms' ? 'cards' : sub) || ui.inputTab || 'payroll';
+    var tabs = '<div class="tabs">' + [['payroll', '급여'], ['expenses', '지출'], ['recurring', '고정지출'], ['cards', '카드내역']].map(function (t) { return '<a class="btn' + (ui.inputTab === t[0] ? ' on' : '') + '" href="#/input/' + t[0] + '">' + t[1] + '</a>'; }).join('') + '</div>';
     var body = tabs;
     if (ui.inputTab === 'payroll') body += payrollTab();
     else if (ui.inputTab === 'expenses') body += expensesTab();
     else if (ui.inputTab === 'cards') body += cardsTab();
     else body += recurringTab();
-    shell('입력', body);
+    shell('월별 입력', body);
   }
 
 
@@ -459,6 +373,21 @@
     return links + upload + queue + cards;
   }
 
+  // 급여 화면용: 큰 금액은 '49만 5천원'처럼 읽기 쉽게, 어려운 말 옆 ? 한 줄 풀이
+  function wonS(n) {
+    if (n === null || n === undefined || isNaN(n)) return '—';
+    n = Math.round(n); var neg = n < 0; n = Math.abs(n); var s;
+    if (n >= 100000000) { var eok = Math.floor(n / 1e8), man0 = Math.round((n % 1e8) / 1e4); s = eok + '억' + (man0 ? ' ' + man0.toLocaleString('ko-KR') + '만' : '') + '원'; }
+    else if (n >= 10000) { var man = Math.floor(n / 10000), cheon = Math.round((n % 10000) / 1000); if (cheon === 10) { man++; cheon = 0; } s = man.toLocaleString('ko-KR') + '만' + (cheon ? ' ' + cheon + '천' : '') + '원'; }
+    else s = n.toLocaleString('ko-KR') + '원';
+    return (neg ? '-' : '') + s;
+  }
+  var GLOSSARY = {
+    비과세: '세금을 안 매기는 급여예요. 대표적으로 식대 월 20만원까지.',
+    원천징수: '회사가 매달 월급에서 미리 떼어 낸 세금이에요. 급여명세서의 "소득세"·"지방소득세" 칸이에요.'
+  };
+  function q(term) { return GLOSSARY[term] ? '<details class="q"><summary aria-label="' + esc(term) + ' 설명">?</summary><span>' + esc(GLOSSARY[term]) + '</span></details>' : ''; }
+
   function payrollTab() {
     var rp = rules();
     var range = E.employmentRange(state.profile);
@@ -559,23 +488,16 @@
   function viewDeductions() {
     var rp = rules();
     var r = E.calc(state, rp);
-    if (r.blocked) return viewStart();
+    if (r.blocked) return shell('공제 관리', '<div class="warn">총급여를 먼저 입력하세요. <a href="#/plan">플랜</a></div>');
     var P = r.personal;
     var sv = E.itemTaxSavings(state, rp);
     // saving: 이 항목 때문에 줄어든 세금(소득세+지방세). savingLabel 로 문구를 바꿀 수 있다
-    var buckets = { mine: [], basic: [], empty: [] };
-    var BASIC_ROWS = ['earnedIncomeDeduction', 'premiums', 'earned_income', 'standard'];
     function card(title, amount, status, lines, row, auto, saving, savingLabel) {
-      var html = '<article class="card dcard"><div class="row-between"><div><b>' + esc(title) + '</b>' + (status === 'CONFIRM' ? ' ' + badge('확인 필요', 'amber') : '') + '</div>' + (typeof saving === 'number' ? '<b class="save">' + (saving > 0 ? '+' : '') + wonS(saving) + '</b>' : '') + '</div>' +
-        '<div class="faint">공제 ' + won(amount) + (typeof saving === 'number' ? ' · ' + esc(savingLabel || '돌려받는 돈(세금 감소)') : '') + '</div>' +
-        ((lines || []).length ? '<details class="more"><summary>자세히</summary>' + lines.map(function (l) { return '<div class="muted">' + l + '</div>'; }).join('') + '<div>' + basisLink(row) + '</div></details>' : '') + '</article>';
-      var k = BASIC_ROWS.indexOf(row) >= 0 ? 'basic' : ((amount > 0 || status === 'CONFIRM') ? 'mine' : 'empty');
-      buckets[k].push(html);
-      return '';
+      return '<article class="card"><div class="row-between"><div><b>' + esc(title) + '</b> ' + badge(auto ? '자동' : '수동', auto ? '' : 'navy') + ' ' + statusBadge(status) + '</div><b>' + won(amount) + '</b></div>' + (typeof saving === 'number' ? '<div class="row-between"><span class="faint">' + esc(savingLabel || '예상 세제혜택(소득세+지방세)') + '</span><b class="save">' + won(saving) + '</b></div>' : '') + (lines || []).map(function (l) { return '<div class="muted">' + l + '</div>'; }).join('') + '<div class="row-between"><span></span>' + basisLink(row) + '</div></article>';
     }
     var fam = P.flags.map(function (f) { return esc(f.alias || L.rel[f.relation]) + ': ' + esc(f.reasonBasic) + (f.isSenior ? ' · 경로우대' : '') + (f.isDisabled && f.isBasicDeductionTarget ? ' · 장애인' : '') + (f.isChildTaxCreditTarget ? ' · 자녀세액공제 대상' : ''); });
     var body = '<h2 class="muted" style="margin:0">소득공제</h2>' +
-      card('인적공제(기본 ' + P.basicCount + '명' + (P.seniorCount ? ', 경로 ' + P.seniorCount : '') + (P.disabledCount ? ', 장애 ' + P.disabledCount : '') + (P.singleParent ? ', 한부모' : '') + (P.woman ? ', 부녀자' : '') + ')', P.total, P.flags.some(function (f) { return f.needsConfirmation; }) ? 'CONFIRM' : 'OK', ['본인 ' + won(rp.personal.basic) + ' 포함. 입력란 없이 가족 조건으로 판정.'].concat(fam).concat(P.womanEligibleButSuppressed ? ['부녀자공제는 한부모공제와 중복 배제'] : []), 'personal', true, sv.PERSONAL_FAMILY, '부양가족 덕분에 돌려받는 돈') +
+      card('인적공제(기본 ' + P.basicCount + '명' + (P.seniorCount ? ', 경로 ' + P.seniorCount : '') + (P.disabledCount ? ', 장애 ' + P.disabledCount : '') + (P.singleParent ? ', 한부모' : '') + (P.woman ? ', 부녀자' : '') + ')', P.total, P.flags.some(function (f) { return f.needsConfirmation; }) ? 'CONFIRM' : 'OK', ['본인 ' + won(rp.personal.basic) + ' 포함. 입력란 없이 가족 조건으로 판정.'].concat(fam).concat(P.womanEligibleButSuppressed ? ['부녀자공제는 한부모공제와 중복 배제'] : []), 'personal', true, sv.PERSONAL_FAMILY, '부양가족으로 줄어든 세금(본인 기본공제 제외)') +
       card('근로소득공제', r.earnedIncomeDeduction, 'OK', ['총급여 ' + won(r.gross) + ' 구간표 적용 → 근로소득금액 ' + won(r.earnedIncome)], 'earnedIncomeDeduction', true) +
       card('연금보험료공제(국민연금)', r.pensionPremiumDeduction, r.premiums.needsConfirm ? 'CONFIRM' : 'OK', ['월별 급여표의 국민연금 합계(수동값 우선)' + (r.premiums.unverified ? ' · 요율 미대조(확인 필요)' : '')], 'premiums', true, sv.PENSION_PREMIUM) +
       card('보험료 특별소득공제(건강·장기요양·고용)', r.insurancePremiumDeduction, 'OK', ['월별 급여표 합계. 표준세액공제와 비교해 유리한 쪽 적용(현재 ' + (r.standardChoice === 'STANDARD' ? '표준' : '특별') + ')'], 'premiums', true, sv.INSURANCE_PREMIUM) +
@@ -595,18 +517,12 @@
       if (c.note) extra.push(esc(c.note));
       var st = c.applied > 0 ? 'OK' : (c.key === 'RENT' && r.rent.needsConfirm && r.rent.amount > 0 ? 'CONFIRM' : 'NO');
       var auto = ['EARNED_INCOME', 'MARRIAGE', 'CHILD', 'STANDARD'].indexOf(c.key) >= 0;
-      body += card(c.label, c.applied, st, extra.concat(c.raw !== c.applied ? ['산출 ' + won(c.raw) + ' 중 ' + won(c.applied) + ' 적용(산출세액 범위)'] : []), c.key.toLowerCase(), auto, sv[c.key], ['EARNED_INCOME', 'STANDARD', 'CHILD'].indexOf(c.key) >= 0 ? '돌려받는 돈(추정)' : null);
+      body += card(c.label, c.applied, st, extra.concat(c.raw !== c.applied ? ['산출 ' + won(c.raw) + ' 중 ' + won(c.applied) + ' 적용(산출세액 범위)'] : []), c.key.toLowerCase(), auto, sv[c.key], ['EARNED_INCOME', 'STANDARD', 'CHILD'].indexOf(c.key) >= 0 ? '예상 세제혜택(지방세 포함 추정)' : null);
     });
     body += card('중소기업 취업자 소득세 감면', r.sme.amount, r.sme.active ? 'OK' : 'NO', [esc(r.sme.reason)], 'smeReduction', true, sv.SME);
-    var warnCap = r.overallCap.excess ? '<div class="warn">소득공제 종합한도 ' + won(r.overallCap.cap) + ' 초과분 ' + won(r.overallCap.excess) + '은 과세표준에 가산</div>' : '';
-    var unsupported = '<p class="faint">이 앱이 계산하지 않는 항목: 개인연금저축(2000년 이전 가입), 소기업·소상공인 공제부금, 투자조합·우리사주·고용유지·장기집합투자, 납세조합·주택차입금이자(1995~97)·외국납부</p>';
-    var form0 = manualDeductionForm();
-    if (buckets.mine.length) form0 = '<details class="card more add-ded"><summary>+ 공제 추가하기</summary>' + form0.replace(/^<section class="card"><h3>\+ 공제 추가하기<\/h3>/, '<div>').replace(/<\/section>$/, '</div>') + '</details>';
-    body = inputTabs('ded') + form0 +
-      '<h2 class="section-title">내 공제 ' + buckets.mine.length + '개</h2>' + (buckets.mine.join('') || '<p class="muted">아직 입력한 공제가 없어요. 위에서 추가해 보세요.</p>') + warnCap +
-      '<details class="card more"><summary>자동으로 계산되는 기본 항목 ' + buckets.basic.length + '개</summary>' + buckets.basic.join('') + '</details>' +
-      '<details class="card more"><summary>아직 없는 항목 ' + buckets.empty.length + '개</summary>' + buckets.empty.join('') + unsupported + '</details>';
-    shell('공제 영수증', body);
+    body += '<article class="card"><b>미지원 항목</b><div class="muted">개인연금저축(2000년 이전 가입), 소기업·소상공인 공제부금, 투자조합·우리사주·고용유지·장기집합투자, 납세조합·주택차입금이자(1995~97)·외국납부 ' + badge('미지원', 'red') + '</div></article>';
+    body += manualDeductionForm();
+    shell('공제 관리', body);
   }
 
   // 주택담보대출 이자 공제 한도 구간 선택(설정과 같은 값을 공유). 미선택이면 이자 공제 0 + 확인 필요
@@ -622,7 +538,7 @@
     if (cat === 'DONATION_HOMETOWN') meta = '<label class="row"><input type="checkbox" name="disaster">특별재난지역 기부(30%)</label>';
     if (cat === 'MORTGAGE_INTEREST') meta = mortgageCapSelect() + '<div class="faint full">금액은 올해 낸 <b>이자</b>만 입력합니다(원금 제외). 요건: 무주택 또는 1주택 세대주, 취득 당시 기준시가 6억원 이하.</div>';
     var list = (state.deductions || []).map(function (d) { var who = d.beneficiaryId === 'self' || !d.beneficiaryId ? '본인' : (function () { var f = state.family.find(function (y) { return y.id === d.beneficiaryId; }); return f ? (f.alias || L.rel[f.relation]) : d.beneficiaryId; })(); return '<tr><td>' + esc(L.tag[d.category] || d.category) + '</td><td>' + esc(who) + '</td><td class="num">' + won(d.amount) + '</td><td class="faint">' + esc(Object.keys(d.meta || {}).map(function (k) { return k + '=' + d.meta[k]; }).join(' ')) + '</td><td>' + (d.evidence ? badge('증빙 확인', 'green') : badge('증빙 미확인', 'gray')) + '</td><td><button class="btn small danger" data-action="del-deduction" data-id="' + d.id + '">삭제</button></td></tr>'; }).join('');
-    return '<section class="card"><h3>+ 공제 추가하기</h3><p class="faint" style="margin:0 0 6px">홈택스 연말정산 간소화 자료의 금액을 넣으면 돼요(1년 합계 한 번에 입력해도 돼요).</p><form data-form="deduction" class="form"><label>항목<select name="category" data-action="ded-category">' + opts(L.tag, cat) + '</select></label><label>금액(원)<input name="amount" inputmode="numeric" required></label><label>대상자<select name="beneficiaryId">' + familyOpts('self') + '</select></label>' + meta + '<label class="row full"><input type="checkbox" name="evidence">증빙(간소화 자료 등) 확인함</label><div class="full btns"><button class="btn primary" type="submit">추가</button></div></form><div class="faint">월별로 반복되는 보험료·연금·월세는 입력 화면의 고정지출 템플릿으로 등록하면 자동 생성됩니다.</div><div class="tbl-wrap"><table><thead><tr><th>항목</th><th>대상자</th><th class="num">금액</th><th>세부</th><th>증빙</th><th></th></tr></thead><tbody>' + (list || '<tr><td colspan="6" class="muted">수동 입력 항목 없음</td></tr>') + '</tbody></table></div></section>';
+    return '<section class="card"><h3>공제 항목 수동 입력(연간 합계 또는 건별)</h3><form data-form="deduction" class="form"><label>항목<select name="category" data-action="ded-category">' + opts(L.tag, cat) + '</select></label><label>금액(원)<input name="amount" inputmode="numeric" required></label><label>대상자<select name="beneficiaryId">' + familyOpts('self') + '</select></label>' + meta + '<label class="row full"><input type="checkbox" name="evidence">증빙(간소화 자료 등) 확인함</label><div class="full btns"><button class="btn primary" type="submit">추가</button></div></form><div class="faint">월별로 반복되는 보험료·연금·월세는 입력 화면의 고정지출 템플릿으로 등록하면 자동 생성됩니다.</div><div class="tbl-wrap"><table><thead><tr><th>항목</th><th>대상자</th><th class="num">금액</th><th>세부</th><th>증빙</th><th></th></tr></thead><tbody>' + (list || '<tr><td colspan="6" class="muted">수동 입력 항목 없음</td></tr>') + '</tbody></table></div></section>';
   }
 
   // ---------- S04 설계 ----------
@@ -674,29 +590,26 @@
     var r = rp ? E.calc(state, rp) : null;
     var flags = r && !r.blocked ? r.personal.flags : state.family.map(function (m) { return rp ? E.deriveFamilyFlags(m, p, rp) : {}; });
     var years = Object.keys(RULES).map(Number).sort();
-    var prof = '<section class="card"><h3>나의 기본 정보</h3><form data-form="profile" class="form">' +
-      '<label><span>세전 연봉(원) ' + q('연봉') + '</span><input name="expectedGrossAnnual" inputmode="numeric" value="' + (p.expectedGrossAnnual ? p.expectedGrossAnnual.toLocaleString('ko-KR') : '') + '"></label><label><span>1년 비과세(원, 식대 등) ' + q('비과세') + '</span><input name="expectedNonTaxable" inputmode="numeric" value="' + (p.expectedNonTaxable || 0).toLocaleString('ko-KR') + '"></label>' +
-      '<label>성별<select name="gender">' + opts({ M: '남', F: '여' }, sc.gender, '선택') + '</select></label><label>태어난 해<input name="birthYear" inputmode="numeric" value="' + (sc.birthYear || '') + '"></label>' +
-      '<label class="row"><input type="checkbox" name="isHouseholdHead"' + (sc.isHouseholdHead ? ' checked' : '') + '>세대주예요 ' + q('세대주') + '</label><label class="row"><input type="checkbox" name="isHomeless"' + (sc.isHomeless ? ' checked' : '') + '>집이 없어요(무주택) ' + q('무주택') + '</label>' +
-      '<details class="full more"><summary>더 자세한 설정(대부분 그대로 두면 돼요)</summary><div class="form">' +
+    var prof = '<section class="card"><h3>연간 설정</h3><form data-form="profile" class="form">' +
       '<label>귀속연도<select name="year">' + years.map(function (y) { return '<option value="' + y + '"' + (y === p.year ? ' selected' : '') + '>' + y + ' (' + L.level[RULES[y].verificationLevel] + ')</option>'; }).join('') + '</select></label>' +
       '<label>기준월<input type="month" name="referenceMonth" value="' + p.referenceMonth + '"></label>' +
       '<label>총급여 계산 방식<select name="salaryForecastMode"><option value="FIXED"' + (p.salaryForecastMode !== 'MONTHLY' ? ' selected' : '') + '>예상연봉 고정</option><option value="MONTHLY"' + (p.salaryForecastMode === 'MONTHLY' ? ' selected' : '') + '>월별 급여 추정(실제+예상)</option></select></label>' +
+      '<label>예상 세전연봉(원)<input name="expectedGrossAnnual" inputmode="numeric" value="' + (p.expectedGrossAnnual || '') + '"></label><label>연간 비과세(원)<input name="expectedNonTaxable" inputmode="numeric" value="' + (p.expectedNonTaxable || 0) + '"></label>' +
       '<label>입사일<input type="date" name="employmentStart" value="' + (p.employmentStart || '') + '"></label><label>퇴사일(선택)<input type="date" name="employmentEnd" value="' + (p.employmentEnd || '') + '"></label>' +
-      '<label class="row"><input type="checkbox" name="disability"' + (sc.disability ? ' checked' : '') + '>본인 장애인</label><label class="row"><input type="checkbox" name="cardFamilyInclusion"' + (p.cardFamilyInclusion ? ' checked' : '') + '>소득요건 충족 가족 카드 사용분 본인 공제에 포함(기본 분리)</label>' +
+      '<label>성별<select name="gender">' + opts({ M: '남', F: '여' }, sc.gender, '선택') + '</select></label><label>본인 생년<input name="birthYear" inputmode="numeric" value="' + (sc.birthYear || '') + '"></label>' +
+      '<label class="row"><input type="checkbox" name="isHouseholdHead"' + (sc.isHouseholdHead ? ' checked' : '') + '>세대주</label><label class="row"><input type="checkbox" name="isHomeless"' + (sc.isHomeless ? ' checked' : '') + '>무주택(월세·청약·전세대출 공제 요건)</label><label class="row"><input type="checkbox" name="disability"' + (sc.disability ? ' checked' : '') + '>본인 장애인</label><label class="row"><input type="checkbox" name="cardFamilyInclusion"' + (p.cardFamilyInclusion ? ' checked' : '') + '>소득요건 충족 가족 카드 사용분 본인 공제에 포함(기본 분리)</label>' +
       '<label>혼인신고 연도(2024~2026, 생애 1회)<input name="marriageRegisteredYear" inputmode="numeric" value="' + (sc.marriageRegisteredYear || '') + '"></label>' +
       '<label>담보대출 조건(이자 공제 한도)<select name="mortgageCapKey"><option value="">미선택(확인 필요)</option>' + (rp ? rp.housing.mortgageInterest.capOptions.map(function (o) { return '<option value="' + o.key + '"' + (p.mortgageCapKey === o.key ? ' selected' : '') + '>' + esc(o.label) + ' ' + won(o.cap) + '</option>'; }).join('') : '') + '</select></label>' +
       '<label>중소기업 취업자 감면 구분<select name="smeCategory">' + opts(L.sme, sme.category, '해당 없음') + '</select></label><label>취업일<input type="date" name="smeEmployedAt" value="' + (sme.employedAt || '') + '"></label>' +
-      '</div></details>' +
-      '<div class="full btns sticky-save"><button class="btn primary" type="submit">저장</button></div></form><div class="faint">바꾸면 바로 저장돼요.</div><div class="btns"><a class="btn small" href="#/start">처음 질문 다시 하기</a></div></section>';
+      '<div class="full btns sticky-save"><button class="btn primary" type="submit">저장</button></div></form><div class="faint">입력값은 바꾸는 즉시 자동 저장됩니다. 한부모·부녀자·배우자 유무는 가족 입력에서 자동 판정합니다(입력란 없음).</div></section>';
     var fe = ui.editingFamily ? state.family.find(function (f) { return f.id === ui.editingFamily; }) : null;
-    var famForm = '<section class="card"><h3>' + (fe ? '가족 수정' : '부양가족') + '</h3><form data-form="family" class="form"><input type="hidden" name="id" value="' + (fe ? fe.id : '') + '"><label>별칭<input name="alias" value="' + esc(fe ? fe.alias : '') + '" placeholder="예: 아내, 첫째"></label><label>관계<select name="relation">' + opts(L.rel, fe ? fe.relation : 'SPOUSE') + '</select></label><label>생년<input name="birthYear" inputmode="numeric" value="' + (fe && fe.birthYear ? fe.birthYear : '') + '"></label><label>연소득 100만원 이하(근로소득만 총급여 500만원 이하)<select name="incomeUnderLimit"><option value=""' + (fe && fe.incomeUnderLimit == null ? ' selected' : '') + '>모르겠어요</option><option value="true"' + (!fe || fe.incomeUnderLimit === true ? ' selected' : '') + '>예</option><option value="false"' + (fe && fe.incomeUnderLimit === false ? ' selected' : '') + '>아니오(소득 있음)</option></select></label><label class="row"><input type="checkbox" name="disability"' + (fe && fe.disability ? ' checked' : '') + '>장애인</label><label class="row"><input type="checkbox" name="cohabiting"' + (!fe || fe.cohabiting !== false ? ' checked' : '') + '>동거</label><label class="row"><input type="checkbox" name="bornOrAdoptedThisYear"' + (fe && fe.bornOrAdoptedThisYear ? ' checked' : '') + '>' + p.year + '년 출생·입양</label><label>출산·입양 순번(첫째 1)<input name="childOrder" inputmode="numeric" value="' + (fe && fe.childOrder ? fe.childOrder : '') + '"></label><div class="full btns"><button class="btn primary" type="submit">' + (fe ? '수정 저장' : '가족 저장') + '</button>' + (fe ? '<button class="btn" type="button" data-action="cancel-family">취소</button>' : '') + '</div></form>' +
+    var famForm = '<section class="card"><h3>' + (fe ? '가족 수정' : '가족 추가') + '</h3><form data-form="family" class="form"><input type="hidden" name="id" value="' + (fe ? fe.id : '') + '"><label>별칭<input name="alias" value="' + esc(fe ? fe.alias : '') + '" placeholder="예: 아내, 첫째"></label><label>관계<select name="relation">' + opts(L.rel, fe ? fe.relation : 'SPOUSE') + '</select></label><label>생년<input name="birthYear" inputmode="numeric" value="' + (fe && fe.birthYear ? fe.birthYear : '') + '"></label><label>연소득 100만원 이하(근로소득만 총급여 500만원 이하)<select name="incomeUnderLimit"><option value=""' + (!fe || fe.incomeUnderLimit == null ? ' selected' : '') + '>미확인</option><option value="true"' + (fe && fe.incomeUnderLimit === true ? ' selected' : '') + '>예</option><option value="false"' + (fe && fe.incomeUnderLimit === false ? ' selected' : '') + '>아니오(소득 있음)</option></select></label><label class="row"><input type="checkbox" name="disability"' + (fe && fe.disability ? ' checked' : '') + '>장애인</label><label class="row"><input type="checkbox" name="cohabiting"' + (!fe || fe.cohabiting !== false ? ' checked' : '') + '>동거</label><label class="row"><input type="checkbox" name="bornOrAdoptedThisYear"' + (fe && fe.bornOrAdoptedThisYear ? ' checked' : '') + '>' + p.year + '년 출생·입양</label><label>출산·입양 순번(첫째 1)<input name="childOrder" inputmode="numeric" value="' + (fe && fe.childOrder ? fe.childOrder : '') + '"></label><div class="full btns"><button class="btn primary" type="submit">' + (fe ? '수정 저장' : '가족 저장') + '</button>' + (fe ? '<button class="btn" type="button" data-action="cancel-family">취소</button>' : '') + '</div></form>' +
       (state.family.length ? '<div class="tbl-wrap"><table><thead><tr><th>가족</th><th>판정(자동)</th><th></th></tr></thead><tbody>' + state.family.map(function (f, i) { var fl = flags[i] || {}; return '<tr><td>' + esc(f.alias || '') + '<br><span class="faint">' + esc(L.rel[f.relation]) + (f.birthYear ? ' · ' + f.birthYear + '년생' : '') + '</span></td><td>' + (fl.isBasicDeductionTarget ? badge('기본공제 대상', 'green') : (fl.needsConfirmation ? badge('확인 필요', 'amber') : badge('대상 아님', 'gray'))) + ' ' + (fl.isCardAggregationTarget ? badge('카드 합산 가능(옵션)') : badge('카드 분리', 'gray')) + (fl.isChildTaxCreditTarget ? ' ' + badge('자녀세액공제', 'green') : '') + (fl.birthAdoptionCreditAmount ? ' ' + badge('출산·입양 ' + won(fl.birthAdoptionCreditAmount), 'green') : '') + '<br><span class="faint">' + esc(fl.reasonBasic || '') + ' · ' + esc(fl.reasonCard || '') + '</span></td><td><div class="btns"><button class="btn small" data-action="edit-family" data-id="' + f.id + '">수정</button><button class="btn small danger" data-action="del-family" data-id="' + f.id + '">삭제</button></div></td></tr>'; }).join('') + '</tbody></table></div>' : '<div class="muted">가족 없음(본인만)</div>') + '</section>';
-    var packs = '<details class="card more"><summary>계산 기준(규칙팩)·출처</summary><div class="tbl-wrap"><table><thead><tr><th>연도</th><th>버전</th><th>검증단계</th><th>검증일</th><th>비고</th></tr></thead><tbody>' + years.map(function (y) { var k = RULES[y]; return '<tr><td>' + y + '</td><td>' + k.version + '</td><td>' + badge(L.level[k.verificationLevel], k.verificationLevel === 'CASE_VERIFIED' ? 'green' : 'amber') + '</td><td>' + k.verifiedAt + '</td><td class="faint">' + esc(k.verificationNote) + '</td></tr>'; }).join('') + '</tbody></table></div><div class="faint">출처: ' + (rp ? rp.sourceUrls.map(function (u) { return '<a href="' + esc(u) + '" target="_blank" rel="noopener">' + esc(u) + '</a>'; }).join(' · ') : '') + '</div><a href="#/basis" class="faint">계산 기준 보기 ›</a></details>';
+    var packs = '<section class="card"><h3>규칙팩</h3><div class="tbl-wrap"><table><thead><tr><th>연도</th><th>버전</th><th>검증단계</th><th>검증일</th><th>비고</th></tr></thead><tbody>' + years.map(function (y) { var k = RULES[y]; return '<tr><td>' + y + '</td><td>' + k.version + '</td><td>' + badge(L.level[k.verificationLevel], k.verificationLevel === 'CASE_VERIFIED' ? 'green' : 'amber') + '</td><td>' + k.verifiedAt + '</td><td class="faint">' + esc(k.verificationNote) + '</td></tr>'; }).join('') + '</tbody></table></div><div class="faint">출처: ' + (rp ? rp.sourceUrls.map(function (u) { return '<a href="' + esc(u) + '" target="_blank" rel="noopener">' + esc(u) + '</a>'; }).join(' · ') : '') + '</div><a href="#/basis" class="faint">계산 기준 보기 ›</a></section>';
     var confirmDel = ui.confirm && ui.confirm.type === 'wipe' ? '<div class="inline-confirm"><b>모든 데이터를 삭제합니다</b><span>급여·지출·가족·설정이 이 기기에서 지워지며 복구할 수 없습니다. 먼저 JSON 백업을 권장합니다.</span><div class="btns"><button class="btn small danger" data-action="confirm-wipe">삭제 확정</button><button class="btn small" data-action="cancel-confirm">취소</button></div></div>' : '';
     var restore = ui.restorePending ? '<div class="inline-confirm"><b>백업 복원</b><span>현재 데이터를 백업 파일(' + ui.restorePending.state.profile.year + '년, 지출 ' + ui.restorePending.state.expenses.length + '건)로 교체합니다. 교체 전 현재 데이터 백업이 자동 다운로드됩니다.</span><div class="btns"><button class="btn small primary" data-action="confirm-restore">복원</button><button class="btn small" data-action="cancel-confirm">취소</button></div></div>' : '';
-    var data = '<section class="card"><h3>백업·삭제</h3><div class="btns"><button class="btn" data-action="backup">JSON 백업 다운로드</button><label class="btn" style="cursor:pointer">백업 복원<input type="file" accept="application/json,.json" data-action="restore-file" style="display:none"></label><button class="btn" data-action="csv">지출 CSV</button><button class="btn danger" data-action="wipe">전체 삭제</button></div>' + confirmDel + restore + '<div class="faint">데이터는 이 브라우저(IndexedDB)에만 저장됩니다. 백업 파일에는 가족 별칭 등 민감정보가 포함될 수 있습니다. 주민등록번호·카드번호·홈택스 비밀번호는 수집하지 않습니다.</div></section>';
-    shell('설정', prof + famForm + data + packs);
+    var data = '<section class="card"><h3>자료</h3><div class="btns"><button class="btn" data-action="backup">JSON 백업 다운로드</button><label class="btn" style="cursor:pointer">백업 복원<input type="file" accept="application/json,.json" data-action="restore-file" style="display:none"></label><button class="btn" data-action="csv">지출 CSV</button><button class="btn danger" data-action="wipe">전체 삭제</button></div>' + confirmDel + restore + '<div class="faint">데이터는 이 브라우저(IndexedDB)에만 저장됩니다. 백업 파일에는 가족 별칭 등 민감정보가 포함될 수 있습니다. 주민등록번호·카드번호·홈택스 비밀번호는 수집하지 않습니다.</div></section>';
+    shell('설정/자료', prof + famForm + packs + data);
   }
 
   // ---------- S07 계산 기준 ----------
@@ -739,7 +652,7 @@
 
   // ---------- 라우팅 ----------
   function render() {
-    var h = (location.hash || '#/home').split('?')[0];
+    var h = (location.hash || '#/plan').split('?')[0];
     var parts = h.replace(/^#\//, '').split('/');
     try {
       switch (parts[0]) {
@@ -751,10 +664,7 @@
         case 'settings': return viewSettings();
         case 'basis': return viewBasis();
         case 'maximize': return viewMaximize();
-        case 'plan': return viewPlan();
-        case 'tips': return viewTips();
-        case 'start': return viewStart();
-        default: return viewHome();
+        default: return viewPlan();
       }
     } catch (err) {
       app.innerHTML = '<main><div class="err">화면 오류: ' + esc(err.message) + '</div><a class="btn" href="#/settings">설정으로</a></main>';
@@ -779,7 +689,6 @@
       ui.importQueue.forEach(buildPreview);
       persist().then(function (ok) { if (ok) toast('카드 등록됨: ' + d.alias + ' (' + l4 + ')'); render(); }); return;
     }
-    if (kind === 'start') { submitStart(form, d); return; }
     if (kind === 'design-family') {
       var by = num(d.birthYear); if (!by || by < 1900 || by > state.profile.year) return toast('출생연도를 확인하세요', true);
       state.scenario.extraFamily = (state.scenario.extraFamily || []).concat([{ id: uid(), alias: d.alias || L.rel[d.relation], relation: d.relation, birthYear: by, disability: checked(form, 'disability'), incomeUnderLimit: true, bornOrAdoptedThisYear: checked(form, 'born'), childOrder: num(d.childOrder), on: true }]);
@@ -989,8 +898,7 @@
     for (var m = 1; m <= 9; m++) { var mm = String(m).padStart(2, '0'); ex.push({ id: 'demo-c' + m, date: y + '-' + mm + '-15', amount: 1200000, paymentMethod: 'CREDIT', useCategory: 'GENERAL', spenderId: 'self', deductionTags: [], status: 'ACTUAL', memo: '예시' }); ex.push({ id: 'demo-d' + m, date: y + '-' + mm + '-20', amount: 300000, paymentMethod: 'DEBIT', useCategory: 'GENERAL', spenderId: 'self', deductionTags: [], status: 'ACTUAL', memo: '예시' }); ex.push({ id: 'demo-m' + m, date: y + '-' + mm + '-05', amount: 80000, paymentMethod: 'DEBIT', useCategory: 'TRADITIONAL_MARKET', spenderId: 'self', deductionTags: [], status: 'ACTUAL', memo: '예시' }); ex.push({ id: 'demo-w' + m, date: y + '-' + mm + '-10', amount: 320000, paymentMethod: 'CREDIT', useCategory: 'GENERAL', spenderId: 'demo-sp', deductionTags: [], status: 'ACTUAL', memo: '예시(배우자, 분리)' }); }
     state.expenses = ex;
     state.deductions = [{ id: 'demo-med', category: 'MEDICAL', beneficiaryId: 'self', amount: 900000, meta: { group: 'UNLIMITED', kind: 'NORMAL', reimbursed: 0 }, evidence: false }];
-    state.onboarded = true;
-    persist().then(function () { toast('예시 데이터를 불러왔어요(모든 값은 예시)'); go('#/home'); });
+    persist().then(function () { toast('예시 데이터를 불러왔습니다(모든 값은 예시)'); render(); });
   }
 
   // ---------- 시작 ----------
