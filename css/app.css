@@ -118,3 +118,6 @@ details.q span{position:absolute;z-index:6;left:-8px;top:24px;width:240px;paddin
 .pay-table tfoot td{border-top:2px solid var(--ink);border-bottom:none;background:var(--blue-bg)}
 fieldset.group{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:0;display:grid;gap:8px}
 fieldset.group legend{padding:0 6px;font-weight:700;font-size:14px}
+.group-title{font-weight:700;font-size:14px;margin-top:4px}
+fieldset.group>.form{gap:8px}
+details.more>summary{cursor:pointer;color:var(--blue);font-size:14px;padding:4px 0}
