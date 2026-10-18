@@ -121,3 +121,16 @@ fieldset.group legend{padding:0 6px;font-weight:700;font-size:14px}
 .group-title{font-weight:700;font-size:14px;margin-top:4px}
 fieldset.group>.form{gap:8px}
 details.more>summary{cursor:pointer;color:var(--blue);font-size:14px;padding:4px 0}
+/* 월별 입력(지출) */
+.mrow{display:grid;grid-template-columns:70px minmax(0,1fr) auto;gap:8px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
+.mrow.open{background:var(--blue-bg);margin:0 -8px;padding:9px 8px;border-radius:8px 8px 0 0}
+.mrow.total{border-top:2px solid var(--ink);border-bottom:none;background:var(--blue-bg);margin:4px -8px 0;padding:9px 8px;border-radius:8px}
+.mrow-m{display:flex;flex-direction:column}
+.mrow-n{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;font-size:13px}
+.mrow-n span{display:block;font-size:11px;color:var(--faint)}
+.month-body{padding:8px 0 14px;border-bottom:2px solid var(--blue-bg)}
+.month-form{margin-top:10px;padding:10px;border:1px dashed #C9D3E0;border-radius:10px}
+.month-form h4{margin:0 0 6px}
+.ok{color:var(--green);font-weight:700}
+.rec-form>summary{font-weight:700}
+@media (max-width:480px){.mrow{grid-template-columns:52px minmax(0,1fr) auto}.mrow-n{grid-template-columns:repeat(2,minmax(0,1fr))}}

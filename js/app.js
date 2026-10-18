@@ -342,20 +342,31 @@
   document.addEventListener('visibilitychange', function () { if (!document.hidden && ui.dir && ui.dir.perm === 'granted') scanDir(); });
 
   // 월별 사용 합계(결제수단별): 카드·현금영수증 내역을 올리면 달마다 얼마 썼는지 한눈에. 취소는 빼고, 공제 안 되는 지출은 제외
+  // 월 × 카드 표: 달마다 어느 카드(현금영수증) 내역을 올렸는지 ✔와 금액으로. 빠진 달을 찾기 쉽게
   function monthlyUsage() {
-    var y = String(state.profile.year), M = {};
+    var y = String(state.profile.year);
+    var srcOf = function (e) {
+      if (e.paymentMethod === 'CASH_RECEIPT') return '__cash';
+      var c = e.cardLast4 && state.cards.find(function (k) { return k.last4 === e.cardLast4; });
+      return c ? c.id : '__etc';
+    };
+    var cols = state.cards.map(function (c) { return { id: c.id, name: c.alias }; }).concat([{ id: '__cash', name: '현금영수증' }, { id: '__etc', name: '그 외·직접 입력' }]);
+    var M = {}, used = {};
     (state.expenses || []).forEach(function (e) {
-      if (!e.date || e.date.slice(0, 4) !== y || e.useCategory === 'EXCLUDED' || e.paymentMethod === 'CASH_NONE') return;
-      var m = e.date.slice(5, 7), v = e.refundOf ? -e.amount : e.amount, r = M[m] = M[m] || { CREDIT: 0, DEBIT: 0, CASH_RECEIPT: 0, mt: 0, total: 0 };
-      if (r[e.paymentMethod] !== undefined) r[e.paymentMethod] += v;
-      if (e.useCategory === 'TRADITIONAL_MARKET' || e.useCategory === 'PUBLIC_TRANSIT') r.mt += v;
-      r.total += v;
+      if (!e.date || e.date.slice(0, 4) !== y || e.paymentMethod === 'CASH_NONE' || e.useCategory === 'EXCLUDED') return;
+      var m = e.date.slice(5, 7), k = srcOf(e); M[m] = M[m] || {}; M[m][k] = (M[m][k] || 0) + signed(e); used[k] = true;
     });
-    var ms = Object.keys(M).sort(); if (!ms.length) return '';
-    var T = { CREDIT: 0, DEBIT: 0, CASH_RECEIPT: 0, mt: 0, total: 0 };
-    var rows = ms.map(function (m) { var r = M[m]; Object.keys(T).forEach(function (k) { T[k] += r[k]; }); return '<tr><td>' + Number(m) + '월</td><td class="num">' + won(r.CREDIT) + '</td><td class="num">' + won(r.DEBIT) + '</td><td class="num">' + won(r.CASH_RECEIPT) + '</td><td class="num">' + won(r.mt) + '</td><td class="num"><b>' + won(r.total) + '</b></td></tr>'; }).join('');
-    return '<section class="card"><h3>월별 사용 합계 <span class="faint">(' + y + '년, 공제 대상만)</span></h3><div class="tbl-wrap"><table class="pay-table"><thead><tr><th>월</th><th class="num">신용카드</th><th class="num">체크·직불</th><th class="num">현금영수증</th><th class="num">그중 시장·교통</th><th class="num">합계</th></tr></thead><tbody>' + rows + '</tbody>' +
-      '<tfoot><tr><td><b>합계</b></td><td class="num">' + won(T.CREDIT) + '</td><td class="num">' + won(T.DEBIT) + '</td><td class="num">' + won(T.CASH_RECEIPT) + '</td><td class="num">' + won(T.mt) + '</td><td class="num"><b>' + won(T.total) + '</b></td></tr></tfoot></table></div><div class="faint">취소 건은 빼고 계산했어요. 보험료·세금 등 공제 안 되는 지출은 넣지 않았어요.</div></section>';
+    cols = cols.filter(function (c) { return used[c.id] || c.id !== '__etc'; });
+    if (!Object.keys(used).length) return '';
+    var colT = {}, allT = 0;
+    var body = yearMonths().map(function (ym) {
+      var m = ym.slice(5), r = M[m] || {}, rowT = 0;
+      var cells = cols.map(function (c) { var v = r[c.id]; if (v === undefined) return '<td class="num faint">—</td>'; rowT += v; colT[c.id] = (colT[c.id] || 0) + v; return '<td class="num"><span class="ok">✔</span> ' + wonS(v) + '</td>'; }).join('');
+      allT += rowT;
+      return '<tr><td>' + Number(m) + '월</td>' + cells + '<td class="num"><b>' + (rowT ? wonS(rowT) : '—') + '</b></td></tr>';
+    }).join('');
+    return '<section class="card"><h3>월별 올린 내역 <span class="faint">(' + y + '년, 공제 대상만)</span></h3><div class="tbl-wrap"><table class="pay-table"><thead><tr><th>월</th>' + cols.map(function (c) { return '<th class="num">' + esc(c.name) + '</th>'; }).join('') + '<th class="num">합계</th></tr></thead><tbody>' + body + '</tbody>' +
+      '<tfoot><tr><td><b>합계</b></td>' + cols.map(function (c) { return '<td class="num">' + wonS(colT[c.id] || 0) + '</td>'; }).join('') + '<td class="num"><b>' + wonS(allT) + '</b></td></tr></tfoot></table></div><div class="faint">✔ = 그 달 내역이 들어와 있어요. — 인 달은 카드사·홈택스에서 그 달 파일을 받아 위에서 올리세요. 취소는 빼고 계산했어요.</div></section>';
   }
 
   function cardsTab() {
@@ -445,6 +456,9 @@
     return form + premForm + sumBox + '<section class="card"><h3>월별 급여표(재직기간 ' + range.start + ' ~ ' + range.end + ')</h3><div class="tbl-wrap"><table class="pay-table"><thead><tr><th>월</th><th class="num">급여</th><th class="num">미리 낸 세금</th><th class="num">국민연금</th><th class="num">건강</th><th class="num">장기요양</th><th class="num">고용</th></tr></thead><tbody>' + rows + '</tbody>' + foot + '</table></div><div class="faint">연봉 계산 방식은 설정에서 "예상연봉 고정" 또는 "월별 추정" 중 선택합니다(현재: ' + (state.profile.salaryForecastMode === 'MONTHLY' ? '월별 추정' : '예상연봉 고정') + ').</div></section>';
   }
 
+  function yearMonths() { var y = String(state.profile.year), a = []; for (var i = 1; i <= 12; i++) a.push(y + '-' + String(i).padStart(2, '0')); return a; }
+  function signed(x) { return x.refundOf ? -x.amount : x.amount; }
+
   function expensesTab() {
     var year = String(state.profile.year);
     var months = E.monthsInRange(E.employmentRange(state.profile));
@@ -452,8 +466,10 @@
     var e = ui.editingExpense ? state.expenses.find(function (x) { return x.id === ui.editingExpense; }) : null;
     var tagChecks = Object.keys(L.tag).map(function (k) { return '<label class="row"><input type="checkbox" name="tags" value="' + k + '"' + (e && (e.deductionTags || []).indexOf(k) >= 0 ? ' checked' : '') + '>' + esc(L.tag[k]) + '</label>'; }).join('');
     var refundOpts = '<option value="">(일반 지출)</option>' + state.expenses.filter(function (x) { return !x.refundOf && (!e || x.id !== e.id); }).map(function (x) { return '<option value="' + x.id + '"' + (e && e.refundOf === x.id ? ' selected' : '') + '>' + x.date + ' ' + won(x.amount) + ' ' + esc(L.pm[x.paymentMethod]) + '</option>'; }).join('');
-    var form = '<section class="card"><h3>' + (e ? '지출 수정' : '지출 추가') + '</h3><form data-form="expense" class="form"><input type="hidden" name="id" value="' + (e ? e.id : '') + '">' +
-      '<label>일자<input type="date" name="date" required value="' + (e ? e.date : (state.profile.referenceMonth + '-01')) + '"></label>' +
+    if (e) ui.expenseOpenMonth = e.date.slice(0, 7);
+    var openYm = ui.expenseOpenMonth;
+    var form = '<div class="month-form"><h4>' + (e ? '지출 수정' : Number((openYm || '').slice(5)) + '월에 지출 추가') + '</h4><form data-form="expense" class="form"><input type="hidden" name="id" value="' + (e ? e.id : '') + '">' +
+      '<label>일자<input type="date" name="date" required value="' + (e ? e.date : (openYm || state.profile.referenceMonth) + '-01') + '"></label>' +
       '<label>금액(원)<input name="amount" inputmode="numeric" required value="' + (e ? e.amount : '') + '"></label>' +
       '<label>결제수단<select name="paymentMethod">' + opts(L.pm, e ? e.paymentMethod : 'CREDIT') + '</select></label>' +
       '<label>사용처 구분<select name="useCategory">' + opts(L.cat, e ? e.useCategory : 'GENERAL') + '</select></label>' +
@@ -462,16 +478,28 @@
       '<label class="full">취소(환불)인 경우 원거래<select name="refundOf">' + refundOpts + '</select></label>' +
       '<details class="full"><summary>공제항목 태그(의료비·기부금·월세 등 세액공제 입력)</summary><div class="grid2">' + tagChecks + '</div><div class="faint">의료비·교육비 세부 구분(대상자 그룹·안경·학원비 등)은 공제 관리 화면의 수동 입력을 쓰세요. 월세 태그를 붙이면 카드공제에서 자동 제외됩니다.</div></details>' +
       '<label class="full">메모<input name="memo" value="' + esc(e ? e.memo : '') + '"></label>' +
-      '<div class="full btns"><button class="btn primary" type="submit">' + (e ? '수정 저장' : '추가') + '</button>' + (e ? '<button class="btn" type="button" data-action="cancel-expense">취소</button>' : '') + '</div></form><div class="faint">공제제외 자동 지정 대상: ' + esc(rules().card.excludedCategories.join(', ')) + '. 전통시장 신용카드 10만원은 전체지출 10만원으로만 집계됩니다(중복 없음).</div></section>';
-    var sel = ui.expenseMonth;
-    var list = state.expenses.filter(function (x) { return x.date && x.date.slice(0, 4) === year && (!sel || x.date.slice(0, 7) === sel); }).sort(function (a, b) { return a.date < b.date ? 1 : -1; });
-    var filter = '<div class="row-between"><h3>지출 목록 ' + (sel ? sel : '전체') + ' · ' + list.length + '건 · ' + won(list.reduce(function (s, x) { return s + (x.refundOf ? -x.amount : x.amount); }, 0)) + '</h3><select style="width:auto" data-action="filter-month"><option value="">전체</option>' + allMonths.map(function (m) { return '<option value="' + m + '"' + (sel === m ? ' selected' : '') + '>' + m + '</option>'; }).join('') + '</select></div>';
-    var rows = list.map(function (x) {
-      var who = x.spenderId === 'self' || !x.spenderId ? '본인' : (function () { var f = state.family.find(function (y) { return y.id === x.spenderId; }); return f ? (f.alias || L.rel[f.relation]) : x.spenderId; })();
-      var ro = x.recurringId ? (x.recurringOverride && x.recurringOverride !== 'NONE' ? badge('고정·수정', 'amber') : badge('고정', 'gray')) : '';
-      return '<tr><td>' + x.date + '<br>' + badge(x.status === 'FORECAST' ? '예상' : '실제', x.status === 'FORECAST' ? 'gray' : 'green') + ro + '</td><td class="num">' + (x.refundOf ? '−' : '') + won(x.amount) + '</td><td>' + esc(L.pm[x.paymentMethod] || x.paymentMethod) + '<br><span class="faint">' + esc(L.cat[x.useCategory] || x.useCategory) + '</span></td><td>' + esc(who) + (x.deductionTags && x.deductionTags.length ? '<br><span class="faint">' + x.deductionTags.map(function (t) { return esc(L.tag[t] || t); }).join(', ') + '</span>' : '') + (x.refundOf ? '<br><span class="faint">취소(원거래 ' + esc(x.refundOf) + ')</span>' : '') + '</td><td>' + esc(x.memo || '') + '</td><td><div class="btns"><button class="btn small" data-action="edit-expense" data-id="' + x.id + '">수정</button>' + (x.recurringId ? '<button class="btn small" data-action="skip-expense" data-id="' + x.id + '">이 달 건너뛰기</button>' : '') + '<button class="btn small danger" data-action="del-expense" data-id="' + x.id + '">삭제</button></div></td></tr>';
+      '<div class="full btns"><button class="btn primary" type="submit">' + (e ? '수정 저장' : '추가') + '</button>' + (e ? '<button class="btn" type="button" data-action="cancel-expense">취소</button>' : '') + '</div></form><div class="faint">공제 안 되는 지출(세금·보험료·통신비·관리비 등)은 사용처 구분을 \'공제제외\'로 두세요.</div></div>';
+    // 1~12월 표: 결제수단별 합계, 달을 누르면 그 달 지출 목록과 추가 칸이 바로 아래에 열린다
+    var T = { CREDIT: 0, DEBIT: 0, CASH_RECEIPT: 0, CASH_NONE: 0, total: 0, n: 0 };
+    var monthsHtml = yearMonths().map(function (ym) {
+      var list = state.expenses.filter(function (x) { return x.date && x.date.slice(0, 7) === ym; }).sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+      var m = { CREDIT: 0, DEBIT: 0, CASH_RECEIPT: 0, CASH_NONE: 0, total: 0 };
+      list.forEach(function (x) { var v = signed(x); if (m[x.paymentMethod] !== undefined) m[x.paymentMethod] += v; m.total += v; });
+      Object.keys(m).forEach(function (k) { T[k] += m[k]; }); T.n += list.length;
+      var open = openYm === ym;
+      var head = '<div class="mrow' + (open ? ' open' : '') + '"><div class="mrow-m"><b>' + Number(ym.slice(5)) + '월</b><span class="faint">' + (list.length ? list.length + '건' : '미입력') + '</span></div>' +
+        '<div class="mrow-n"><div><span>신용</span>' + (m.CREDIT ? wonS(m.CREDIT) : '—') + '</div><div><span>체크</span>' + (m.DEBIT ? wonS(m.DEBIT) : '—') + '</div><div><span>현금영수증</span>' + (m.CASH_RECEIPT ? wonS(m.CASH_RECEIPT) : '—') + '</div><div><span>합계</span><b>' + (m.total ? wonS(m.total) : '—') + '</b></div></div>' +
+        '<button class="btn small' + (list.length ? '' : ' primary') + '" data-action="toggle-exp-month" data-ym="' + ym + '">' + (open ? '닫기' : (list.length ? '열기' : '입력')) + '</button></div>';
+      if (!open) return head;
+      var rows = list.map(function (x) {
+        var who = x.spenderId === 'self' || !x.spenderId ? '' : (function () { var f = state.family.find(function (y) { return y.id === x.spenderId; }); return f ? (f.alias || L.rel[f.relation]) : x.spenderId; })();
+        var ro = x.recurringId ? ' ' + badge(x.recurringOverride === 'SKIP' ? '고정·건너뜀' : '고정', 'gray') : '';
+        return '<tr><td>' + Number(x.date.slice(8)) + '일' + ro + '</td><td class="num">' + (x.refundOf ? '−' : '') + won(x.amount) + '</td><td>' + esc(L.pm[x.paymentMethod] || x.paymentMethod) + '<br><span class="faint">' + esc(L.cat[x.useCategory] || x.useCategory) + (who ? ' · ' + esc(who) : '') + '</span></td><td>' + esc(x.merchant || x.memo || '') + (x.deductionTags && x.deductionTags.length ? '<br><span class="faint">' + x.deductionTags.map(function (t) { return esc(L.tag[t] || t); }).join(', ') + '</span>' : '') + '</td><td><div class="btns"><button class="btn small" data-action="edit-expense" data-id="' + x.id + '">수정</button>' + (x.recurringId ? '<button class="btn small" data-action="skip-expense" data-id="' + x.id + '">건너뛰기</button>' : '') + '<button class="btn small danger" data-action="del-expense" data-id="' + x.id + '">삭제</button></div></td></tr>';
+      }).join('');
+      return head + '<div class="month-body">' + (rows ? '<div class="tbl-wrap"><table><tbody>' + rows + '</tbody></table></div>' : '<p class="muted">이 달 지출이 없어요.</p>') + form + '</div>';
     }).join('');
-    return form + '<section class="card">' + filter + '<div class="tbl-wrap"><table><thead><tr><th>일자</th><th class="num">금액</th><th>수단/사용처</th><th>사용자/공제</th><th>메모</th><th></th></tr></thead><tbody>' + (rows || '<tr><td colspan="6" class="muted">지출이 없습니다</td></tr>') + '</tbody></table></div><div class="btns"><button class="btn small" data-action="csv">CSV 내보내기</button></div></section>';
+    var foot = '<div class="mrow total"><div class="mrow-m"><b>합계</b><span class="faint">' + T.n + '건</span></div><div class="mrow-n"><div><span>신용</span>' + wonS(T.CREDIT) + '</div><div><span>체크</span>' + wonS(T.DEBIT) + '</div><div><span>현금영수증</span>' + wonS(T.CASH_RECEIPT) + '</div><div><span>합계</span><b>' + wonS(T.total) + '</b></div></div><span></span></div>';
+    return '<section class="card"><h3>월별 지출 <span class="faint">(' + year + '년)</span></h3><p class="faint" style="margin:0 0 6px">달을 눌러 그 달 지출을 보고 추가해요. 카드·현금영수증 내역은 카드내역 탭에서 파일로 한 번에 올리면 여기에 들어와요.</p>' + monthsHtml + foot + '<div class="btns" style="margin-top:8px"><button class="btn small" data-action="csv">CSV 내보내기</button></div></section>';
   }
 
   function recurringTab() {
@@ -479,7 +507,7 @@
     var defStart = R.defaultStartMonth(state.profile.year, state.profile.employmentStart);
     var loan = t && t.loan ? t.loan : {};
     var tagOpts = '<option value="">(없음)</option>' + Object.keys(L.tag).map(function (k) { return '<option value="' + k + '"' + (t && (t.deductionTags || [])[0] === k ? ' selected' : '') + '>' + esc(L.tag[k]) + '</option>'; }).join('');
-    var form = '<section class="card"><h3>' + (t ? '고정지출 템플릿 수정' : '고정지출 템플릿 추가') + '</h3><form data-form="recurring" class="form"><input type="hidden" name="id" value="' + (t ? t.id : '') + '">' +
+    var form = '<details class="card more rec-form"' + (t || !state.recurring.length ? ' open' : '') + '><summary>' + (t ? '고정지출 수정: ' + esc(t.name) : '+ 고정지출 등록(매달 나가는 보험료·월세·통신비 등)') + '</summary><form data-form="recurring" class="form"><input type="hidden" name="id" value="' + (t ? t.id : '') + '">' +
       '<label>명칭<input name="name" required value="' + esc(t ? t.name : '') + '" placeholder="예: 실손보험료"></label>' +
       '<label>월 금액(원)<input name="amount" inputmode="numeric" value="' + (t ? t.amount : '') + '"></label>' +
       '<label>결제수단<select name="paymentMethod">' + opts(L.pm, t ? t.paymentMethod : 'CASH_NONE') + '</select></label>' +
@@ -494,14 +522,32 @@
       '<label>월 원금(대출만)<input name="principal" inputmode="numeric" value="' + (loan.principal || '') + '"></label><label>월 이자(대출만)<input name="interest" inputmode="numeric" value="' + (loan.interest || '') + '"></label>' +
       '<label class="full">메모<input name="memo" value="' + esc(t ? t.memo : '') + '"></label>' +
       (t ? '<label class="full">적용 범위<select name="mode"><option value="ALL">시작 월부터 전체(개별 수정한 월은 유지)</option><option value="FROM_REFERENCE">기준 달(' + state.profile.referenceMonth + ')부터</option></select></label>' : '') +
-      '<div class="full btns"><button class="btn primary" type="submit">' + (t ? '수정 적용' : '등록(시작 월부터 월별 생성)') + '</button>' + (t ? '<button class="btn" type="button" data-action="cancel-recurring">취소</button>' : '') + '</div></form><div class="faint">시작 월 기본값은 연말정산 연도 1월과 재직 시작 월 중 늦은 쪽입니다. 연중에 등록해도 기본값 그대로 두면 1월부터 소급 생성됩니다. 기준 달 이전은 실제, 이후는 예상으로 표시됩니다.</div></section>';
+      '<div class="full btns"><button class="btn primary" type="submit">' + (t ? '수정 적용' : '등록(시작 월부터 월별 생성)') + '</button>' + (t ? '<button class="btn" type="button" data-action="cancel-recurring">취소</button>' : '') + '</div></form><div class="faint">시작 월 기본값은 연말정산 연도 1월과 재직 시작 월 중 늦은 쪽입니다. 연중에 등록해도 기본값 그대로 두면 1월부터 소급 생성됩니다. 기준 달 이전은 실제, 이후는 예상으로 표시됩니다.</div></details>';
     var rows = state.recurring.map(function (x) {
       var cnt = state.expenses.filter(function (e) { return e.recurringId === x.id; });
       var sum = cnt.reduce(function (s, e) { return s + e.amount; }, 0);
       var confirm = ui.confirm && ui.confirm.type === 'del-recurring' && ui.confirm.id === x.id ? '<div class="inline-confirm"><b>"' + esc(x.name) + '" 삭제</b><span>생성된 월 항목 ' + cnt.length + '건을 어떻게 할까요?</span><div class="btns"><button class="btn small danger" data-action="confirm-del-recurring" data-id="' + x.id + '" data-keep="0">전체 삭제</button><button class="btn small" data-action="confirm-del-recurring" data-id="' + x.id + '" data-keep="1">개별 수정분만 남기기</button><button class="btn small" data-action="cancel-confirm">취소</button></div></div>' : '';
       return '<div class="stage"><div class="row-between"><b>' + esc(x.name) + '</b><span>' + won(x.loan && x.loan.type ? (x.loan.principal || 0) + (x.loan.interest || 0) : x.amount) + '/월</span></div><div class="muted">' + x.startMonth + ' ~ ' + (x.endMonth || state.profile.year + '-12') + ' · ' + esc(L.pm[x.paymentMethod]) + ' · ' + esc(L.cat[x.useCategory]) + (x.deductionTags && x.deductionTags.length ? ' · ' + x.deductionTags.map(function (k) { return esc(L.tag[k] || k); }).join(', ') : '') + (x.loan && x.loan.type ? ' · ' + (x.loan.type === 'MORTGAGE' ? '담보대출(이자 ' + won(x.loan.interest) + '만 공제)' : '전세대출(원리금 전체)') : '') + '</div><div class="kv muted"><span>생성 ' + cnt.length + '건</span><span>연 합계 ' + won(sum) + '</span></div><div class="btns"><button class="btn small" data-action="edit-recurring" data-id="' + x.id + '">수정</button><button class="btn small" data-action="end-recurring" data-id="' + x.id + '">이번 달로 종료</button><button class="btn small danger" data-action="del-recurring" data-id="' + x.id + '">삭제</button></div>' + confirm + '</div>';
     }).join('');
-    return form + '<section class="card"><h3>템플릿 ' + state.recurring.length + '개</h3>' + (rows || '<div class="muted">등록된 고정지출이 없습니다</div>') + '</section>';
+    // 월 × 고정지출 표: 칸을 누르면 그 달 항목 수정(지출 탭으로 이동)
+    var grid = '';
+    if (state.recurring.length) {
+      var colT = state.recurring.map(function () { return 0; }), allT = 0;
+      var body = yearMonths().map(function (ym) {
+        var rowT = 0;
+        var cells = state.recurring.map(function (x, i) {
+          var ex = state.expenses.filter(function (e) { return e.recurringId === x.id && e.date && e.date.slice(0, 7) === ym; });
+          if (!ex.length) return '<td class="num faint">—</td>';
+          var v = ex.reduce(function (a, e) { return a + signed(e); }, 0); rowT += v; colT[i] += v;
+          var skip = ex.every(function (e) { return e.recurringOverride === 'SKIP'; }), mod = ex.some(function (e) { return e.recurringOverride && e.recurringOverride !== 'NONE' && e.recurringOverride !== 'SKIP'; });
+          return '<td class="num"><button class="btn link" data-action="goto-expense" data-id="' + ex[0].id + '">' + (skip ? '건너뜀' : won(v)) + '</button>' + (mod ? ' ' + badge('수정', 'amber') : '') + '</td>';
+        }).join('');
+        allT += rowT;
+        return '<tr><td>' + Number(ym.slice(5)) + '월</td>' + cells + '<td class="num"><b>' + (rowT ? won(rowT) : '—') + '</b></td></tr>';
+      }).join('');
+      grid = '<section class="card"><h3>월별 고정지출 <span class="faint">(' + state.profile.year + '년)</span></h3><div class="tbl-wrap"><table class="pay-table"><thead><tr><th>월</th>' + state.recurring.map(function (x) { return '<th class="num">' + esc(x.name) + '</th>'; }).join('') + '<th class="num">월 합계</th></tr></thead><tbody>' + body + '</tbody><tfoot><tr><td><b>합계</b></td>' + colT.map(function (v) { return '<td class="num">' + won(v) + '</td>'; }).join('') + '<td class="num"><b>' + won(allT) + '</b></td></tr></tfoot></table></div><div class="faint">금액을 누르면 그 달만 고치거나 건너뛸 수 있어요.</div></section>';
+    }
+    return form + grid + '<section class="card"><h3>등록한 고정지출 ' + state.recurring.length + '개</h3>' + (rows || '<div class="muted">등록된 고정지출이 없어요. 위에서 등록하면 매달 자동으로 들어가요.</div>') + '</section>';
   }
 
   // ---------- S03 공제 ----------
@@ -755,7 +801,7 @@
       var obj = { id: ex ? ex.id : uid(), date: d.date, amount: amt, paymentMethod: d.paymentMethod, useCategory: d.useCategory, spenderId: d.spenderId || 'self', deductionTags: tagsOf(form), status: d.status, memo: d.memo || '', refundOf: d.refundOf || undefined, recurringId: ex ? ex.recurringId : undefined, recurringOverride: ex && ex.recurringId ? 'AMOUNT' : (ex ? ex.recurringOverride : undefined), loan: ex ? ex.loan : undefined };
       if (obj.deductionTags.indexOf('RENT_CREDIT') >= 0) obj.useCategory = 'EXCLUDED';
       if (ex) Object.assign(ex, obj); else state.expenses.push(obj);
-      ui.editingExpense = null; persist().then(render); return;
+      ui.editingExpense = null; ui.expenseOpenMonth = obj.date.slice(0, 7); persist().then(function (ok) { if (ok) toast(Number(obj.date.slice(5, 7)) + '월 지출 저장됨'); render(); }); return;
     }
     if (kind === 'recurring') {
       var t = { id: d.id || uid(), name: d.name, amount: num(d.amount) || 0, paymentMethod: d.paymentMethod, useCategory: d.useCategory, spenderId: d.spenderId || 'self', deductionTags: d.tag ? [d.tag] : [], startMonth: d.startMonth, endMonth: d.endMonth || null, paymentDay: num(d.paymentDay) || 1, memo: d.memo || '', year: state.profile.year, loan: d.loanType ? { type: d.loanType, principal: num(d.principal) || 0, interest: num(d.interest) || 0 } : undefined };
@@ -893,7 +939,9 @@
         ui.importQueue.splice(qc, 1); ui.importQueue.forEach(buildPreview);
         persist().then(function () { toast(n2 + '건을 지출에 추가했습니다'); render(); }); break;
       }
-      case 'edit-expense': ui.editingExpense = id; render(); window.scrollTo(0, 0); break;
+      case 'edit-expense': ui.editingExpense = id; render(); var fe0 = app.querySelector('.month-form'); if (fe0) fe0.scrollIntoView({ block: 'center' }); break;
+      case 'toggle-exp-month': ui.editingExpense = null; ui.expenseOpenMonth = ui.expenseOpenMonth === btn.getAttribute('data-ym') ? null : btn.getAttribute('data-ym'); render(); var mo = app.querySelector('.mrow.open'); if (mo) mo.scrollIntoView({ block: 'start' }); break;
+      case 'goto-expense': ui.editingExpense = id; ui.inputTab = 'expenses'; go('#/input/expenses'); break;
       case 'cancel-expense': ui.editingExpense = null; render(); break;
       case 'del-expense': state.expenses = state.expenses.filter(function (x) { return x.id !== id && x.refundOf !== id; }); persist().then(render); break;
       case 'skip-expense': { var sx = state.expenses.find(function (x) { return x.id === id; }); if (sx) { sx.amount = 0; sx.recurringOverride = 'SKIP'; persist().then(render); } break; }
